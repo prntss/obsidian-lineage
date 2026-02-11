@@ -1,0 +1,28 @@
+{
+  "name": "lineage",
+  "version": "0.1.0",
+  "description": "Lineage Obsidian plugin",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node esbuild.config.mjs watch",
+    "build": "tsc -p tsconfig.build.json -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [],
+  "license": "0-BSD",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/js-yaml": "^4.0.9",
+    "builtin-modules": "^3.3.0",
+    "esbuild": "^0.19.0",
+    "obsidian": "latest",
+    "tslib": "^2.6.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.2.0"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  }
+}

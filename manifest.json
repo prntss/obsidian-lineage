@@ -1,0 +1,9 @@
+{
+  "id": "lineage",
+  "name": "Lineage",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "Document-first genealogy research sessions for Obsidian.",
+  "author": "Lineage",
+  "isDesktopOnly": false
+}
