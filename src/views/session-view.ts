@@ -19,6 +19,46 @@ import { ProjectionEngine } from "../projection/projection-engine";
 import { ProjectionSummary, createEmptySummary } from "../projection/types";
 
 export const VIEW_TYPE_SESSION = "lineage-session-view";
+export const ADD_ASSERTION_TYPES = [
+  "identity",
+  "birth",
+  "death",
+  "marriage",
+  "parent-child",
+  "residence",
+  "freeform"
+] as const;
+
+export function getAssertionModalVisibility(type: string): {
+  showIdentityFields: boolean;
+  showParticipants: boolean;
+  showParentChild: boolean;
+} {
+  const isIdentity = type === "identity";
+  const isParentChild = type === "parent-child";
+  return {
+    showIdentityFields: isIdentity,
+    showParticipants: !isParentChild,
+    showParentChild: isParentChild
+  };
+}
+
+export function getMatchActionLabel(matchedTo: string | null | undefined): "Match" | "Rematch" {
+  return matchedTo?.trim() ? "Rematch" : "Match";
+}
+
+export function getMatchStatusDisplay(matchedTo: string | null | undefined): {
+  text: "✓ matched" | "⚠ unmatched";
+  title?: string;
+} {
+  if (matchedTo?.trim()) {
+    return {
+      text: "✓ matched",
+      title: `Matched to ${matchedTo}`
+    };
+  }
+  return { text: "⚠ unmatched" };
+}
 
 export class SessionView extends ItemView {
   private currentFile: TFile | null = null;
@@ -563,11 +603,10 @@ export class SessionView extends ItemView {
 
         const status = document.createElement("span");
         status.className = "session-person-status";
-        if (person.matched_to) {
-          status.textContent = "✓ matched";
-          status.title = `Matched to ${person.matched_to}`;
-        } else {
-          status.textContent = "⚠ unmatched";
+        const matchStatus = getMatchStatusDisplay(person.matched_to);
+        status.textContent = matchStatus.text;
+        if (matchStatus.title) {
+          status.title = matchStatus.title;
         }
         row.appendChild(status);
 
@@ -577,7 +616,7 @@ export class SessionView extends ItemView {
         const rematchButton = document.createElement("button");
         rematchButton.type = "button";
         rematchButton.className = "session-button";
-        rematchButton.textContent = person.matched_to ? "Rematch" : "Match";
+        rematchButton.textContent = getMatchActionLabel(person.matched_to);
         rematchButton.addEventListener("click", () => {
           this.openMatchModal(person);
         });
@@ -1672,15 +1711,7 @@ class AddAssertionModal extends Modal {
 
     const typeLabel = form.createEl("label", { text: "Type" });
     this.typeSelect = form.createEl("select");
-    [
-      "identity",
-      "birth",
-      "death",
-      "marriage",
-      "parent-child",
-      "residence",
-      "freeform"
-    ].forEach((value) => {
+    ADD_ASSERTION_TYPES.forEach((value) => {
       const option = this.typeSelect.createEl("option");
       option.value = value;
       option.textContent = value;
@@ -1782,14 +1813,11 @@ class AddAssertionModal extends Modal {
     this.errorEl = form.createDiv({ cls: "session-modal-error" });
 
     const toggleTypeFields = () => {
-      const isIdentity = this.typeSelect.value === "identity";
-      const isParentChild = this.typeSelect.value === "parent-child";
-      nameLabel.style.display = isIdentity ? "flex" : "none";
-      sexLabel.style.display = isIdentity ? "flex" : "none";
-      this.participantSection.toggleAttribute("hidden", isParentChild);
-      this.parentChildSection.toggleAttribute("hidden", !isParentChild);
-      this.participantSection.style.display = isParentChild ? "none" : "flex";
-      this.parentChildSection.style.display = isParentChild ? "flex" : "none";
+      const visibility = getAssertionModalVisibility(this.typeSelect.value);
+      nameLabel.toggleAttribute("hidden", !visibility.showIdentityFields);
+      sexLabel.toggleAttribute("hidden", !visibility.showIdentityFields);
+      this.participantSection.toggleAttribute("hidden", !visibility.showParticipants);
+      this.parentChildSection.toggleAttribute("hidden", !visibility.showParentChild);
       this.errorEl.textContent = "";
     };
     toggleTypeFields();

@@ -12,6 +12,12 @@ export class App {
     createFolder: async (path: string) => new TFolder(path),
     create: async (_path: string, _content: string) => new TFile()
   };
+  workspace = {
+    on: () => ({})
+  };
+  metadataCache = {
+    on: () => ({})
+  };
 }
 
 export function normalizePath(path: string): string {
@@ -50,7 +56,10 @@ export class Setting {
 
 export class ItemView {
   contentEl: HTMLElement = {} as HTMLElement;
-  constructor(public leaf: WorkspaceLeaf) {}
+  app: App;
+  constructor(public leaf: WorkspaceLeaf) {
+    this.app = ((globalThis as { app?: App }).app ?? new App()) as App;
+  }
   getViewType(): string {
     return "";
   }
@@ -63,4 +72,47 @@ export class ItemView {
   getState(): Record<string, unknown> {
     return {};
   }
+  registerEvent(_eventRef: unknown): void {}
+  registerDomEvent(
+    _el: HTMLElement,
+    _type: string,
+    _callback: (event: Event) => void
+  ): void {}
+}
+
+export class Modal {
+  modalEl: HTMLElement = {} as HTMLElement;
+  contentEl: HTMLElement = {} as HTMLElement;
+  titleEl = {
+    setText: (_text: string) => {}
+  };
+  constructor(public app: App) {}
+  open(): void {
+    this.onOpen();
+  }
+  close(): void {
+    this.onClose();
+  }
+  onOpen(): void {}
+  onClose(): void {}
+}
+
+export class FuzzySuggestModal<T> extends Modal {
+  getItems(): T[] {
+    return [];
+  }
+  getItemText(_item: T): string {
+    return "";
+  }
+  onChooseItem(_item: T, _evt: MouseEvent | KeyboardEvent): void {}
+}
+
+export class AbstractInputSuggest<T> {
+  constructor(public app: App, public inputEl: HTMLInputElement) {}
+  getSuggestions(_query: string): T[] {
+    return [];
+  }
+  renderSuggestion(_value: T, _el: HTMLElement): void {}
+  selectSuggestion(_value: T): void {}
+  close(): void {}
 }
