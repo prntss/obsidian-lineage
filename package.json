@@ -1,17 +1,31 @@
 {
   "name": "lineage",
   "version": "0.1.0",
-  "description": "Lineage Obsidian plugin",
+  "description": "Document-first genealogy research plugin for Obsidian",
   "main": "main.js",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/prntss/lineage.git"
+  },
+  "homepage": "https://github.com/prntss/lineage",
+  "bugs": {
+    "url": "https://github.com/prntss/lineage/issues"
+  },
+  "author": "prntss",
   "scripts": {
     "dev": "node esbuild.config.mjs watch",
     "build": "tsc -p tsconfig.build.json -noEmit -skipLibCheck && node esbuild.config.mjs production",
     "test": "vitest run",
     "test:watch": "vitest"
   },
-  "keywords": [],
-  "license": "0-BSD",
+  "keywords": [
+    "obsidian",
+    "obsidian-plugin",
+    "genealogy",
+    "research"
+  ],
+  "license": "MIT",
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/js-yaml": "^4.0.9",

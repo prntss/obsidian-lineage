@@ -41,7 +41,26 @@ data.json
 .env.*
 !.env.example
 
-# Docs (ignore files in docs root and all docs subfolders)
-docs/*.md
-docs/*/
+# Local AI agent context/config (do not publish)
+CLAUDE.md
+AGENTS.md
+.claude/
+.codex/
+
+# Docs: private directories (internal planning artifacts)
+docs/plans/
+docs/brainstorms/
+docs/solutions/
+docs/audits/
+docs/roadmaps/
+docs/screenshots/
+docs/reference/
+
+# Docs: public directories are tracked
+# docs/specs/
+# docs/decisions/
+
+# Docs: root-level markdown files are tracked
+
+# Todos are private
 todos/
