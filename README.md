@@ -36,7 +36,7 @@ Entities become *outcomes* of your research, not prerequisites for data entry.
 ## Quick Start
 
 **Prerequisites:**
-- Obsidian 1.0+
+- Obsidian 1.4+
 - Lineage plugin installed (see [Installation](#installation))
 
 **Create your first research session:**
@@ -143,7 +143,7 @@ The plugin creates or updates:
 **Not yet available in Community Plugins.**
 
 Manual installation:
-1. Download the latest release from [Releases](https://github.com/YOUR_USERNAME/lineage/releases)
+1. Download the latest release from [Releases](https://github.com/prentissw/lineage/releases)
 2. Extract to `.obsidian/plugins/lineage/`
 3. Reload Obsidian
 4. Enable "Lineage" in Settings → Community Plugins
@@ -154,7 +154,7 @@ Clone and build from source:
 
 ```bash
 # Clone repository
-git clone https://github.com/YOUR_USERNAME/lineage.git
+git clone https://github.com/prentissw/lineage.git
 cd lineage
 
 # Install dependencies
@@ -221,7 +221,7 @@ Lineage uses a **two-tier data model**:
 ### Prerequisites
 - Node.js 18+
 - npm 8+
-- Obsidian 1.0+
+- Obsidian 1.4+
 
 ### Build Commands
 
@@ -231,7 +231,6 @@ Lineage uses a **two-tier data model**:
 | `npm run dev` | Build and watch for changes |
 | `npm run build` | Production build |
 | `npm test` | Run unit tests (Vitest) |
-| `npm run lint` | Check code style |
 
 ### Running Tests
 
@@ -240,7 +239,7 @@ Lineage uses a **two-tier data model**:
 npm test
 
 # Watch mode
-npm test -- --watch
+npm run test:watch
 
 # Coverage report
 npm test -- --coverage
@@ -254,16 +253,17 @@ lineage/
 │   ├── main.ts              # Plugin entry point
 │   ├── session-manager.ts   # Parse/serialize sessions
 │   ├── views/
-│   │   ├── session-view.ts  # Dockable panel
-│   │   └── session-view.css # Panel styles
+│   │   └── session-view.ts  # Dockable panel
 │   ├── types.ts             # TypeScript definitions
 │   └── commands.ts          # Command palette actions
+├── styles.css               # Canonical plugin + panel styles
 ├── test/                    # Vitest unit tests
 ├── docs/                    # Specification documents
 │   ├── overview.md          # Design principles
-│   ├── data-model.md        # Entity definitions
-│   ├── session-format.md    # Session note structure
-│   ├── ui-spec.md           # Panel layout
+│   ├── spec/                # Current-state flow specs
+│   │   ├── data-model.md    # Data model behavior (as implemented)
+│   │   ├── session-format.md # Session format behavior (as implemented)
+│   │   └── ui-spec.md       # Session UI behavior (as implemented)
 │   └── milestones.md        # Implementation roadmap
 ├── manifest.json            # Obsidian plugin manifest
 ├── package.json
@@ -274,13 +274,13 @@ lineage/
 
 **For Users:**
 - [Overview](docs/overview.md) — Problem statement and design principles
-- [Session Format](docs/session-format.md) — How to structure session notes
-- [Data Model](docs/data-model.md) — Understanding entities
+- [Session Format](docs/spec/session-format.md) — How session notes are parsed and persisted
+- [Data Model](docs/spec/data-model.md) — Understanding entities
 
 **For Developers:**
 - [Milestones](docs/milestones.md) — Implementation roadmap with acceptance criteria
-- [UI Spec](docs/ui-spec.md) — Dockable panel layout and behaviors
-- [Assertion Model](docs/assertion-model.md) — Typed templates and conflict handling
+- [UI Spec](docs/spec/ui-spec.md) — Session panel behavior and UX flow
+- [Assertion Model](docs/specs/assertion-model.md) — As-implemented assertion behavior and flow analysis
 - [Projection Rules](docs/projection-rules.md) — How assertions become entities
 
 **Reference:**
@@ -446,7 +446,7 @@ npm run build
 Contributions welcome! This project is in early development.
 
 **Ways to contribute:**
-- Report bugs via [Issues](https://github.com/YOUR_USERNAME/lineage/issues)
+- Report bugs via [Issues](https://github.com/prentissw/lineage/issues)
 - Suggest features (especially from practicing genealogists)
 - Submit pull requests (see [Development Setup](#development-setup))
 - Improve documentation
@@ -458,7 +458,7 @@ Contributions welcome! This project is in early development.
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+0-BSD License — see [LICENSE](LICENSE) for details.
 
 ---
 

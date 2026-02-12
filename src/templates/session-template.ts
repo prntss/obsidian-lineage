@@ -1,3 +1,4 @@
+import yaml from "js-yaml";
 import { RecordType } from "../types";
 import { formatDate } from "../utils/date";
 import { generateSessionId } from "../utils/id";
@@ -24,15 +25,48 @@ export function buildSessionTemplate(
   const documentFile = options.documentFile ?? "";
   const documentTranscription = options.documentTranscription ?? "";
   const sessionId = generateSessionId();
+  const metadata = {
+    lineage_type: "research_session",
+    title,
+    record_type: recordType,
+    repository,
+    locator,
+    session_date: date,
+    projected_entities: [] as string[]
+  };
+  const sessionBlock = {
+    session: {
+      id: sessionId,
+      document: {
+        url: documentUrl,
+        file: documentFile,
+        transcription: documentTranscription
+      }
+    },
+    sources: [] as unknown[],
+    persons: [] as unknown[],
+    assertions: [] as unknown[],
+    citations: [] as unknown[]
+  };
+  const frontmatterYaml = yaml
+    .dump(metadata, {
+      indent: 2,
+      lineWidth: 80,
+      noRefs: true,
+      sortKeys: false
+    })
+    .trimEnd();
+  const sessionYaml = yaml
+    .dump(sessionBlock, {
+      indent: 2,
+      lineWidth: 80,
+      noRefs: true,
+      sortKeys: false
+    })
+    .trimEnd();
 
   return `---
-lineage_type: research_session
-title: "${title}"
-record_type: ${recordType}
-repository: "${repository}"
-locator: "${locator}"
-session_date: ${date}
-projected_entities: []
+${frontmatterYaml}
 ---
 
 # ${title}
@@ -41,17 +75,7 @@ projected_entities: []
 
 
 \`\`\`lineage-session
-session:
-  id: ${sessionId}
-  document:
-    url: "${documentUrl}"
-    file: "${documentFile}"
-    transcription: |
-      ${documentTranscription}
-sources: []
-persons: []
-assertions: []
-citations: []
+${sessionYaml}
 \`\`\`
 `;
 }

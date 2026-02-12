@@ -1,6 +1,6 @@
 .lineage-session-view {
   height: 100%;
-  overflow: hidden;
+  overflow: visible;
   padding: 0;
 }
 
@@ -15,6 +15,7 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: visible;
   padding: 16px;
   scroll-padding-bottom: 96px;
   display: flex;
@@ -80,6 +81,43 @@
   padding: 8px 10px;
   font-size: 0.95em;
   transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.session-input select {
+  position: relative;
+  z-index: 2;
+  /* Align with Obsidian control height to avoid text clipping in themed UIs */
+  height: var(--input-height, 32px);
+  min-height: var(--input-height, 32px);
+  line-height: calc(var(--input-height, 32px) - 2px);
+  padding-top: 0;
+  padding-bottom: 0;
+  padding-left: 10px;
+  padding-right: 28px;
+  appearance: auto;
+  -webkit-appearance: menulist;
+}
+
+.session-modal select {
+  position: relative;
+  z-index: 2;
+  /* Modal fonts/themes vary more, so avoid fixed line-height clipping */
+  min-height: var(--input-height, 32px);
+  height: auto;
+  line-height: normal;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  padding-left: 10px;
+  padding-right: 28px;
+  appearance: auto;
+  -webkit-appearance: menulist;
+}
+
+.session-input select option,
+.session-modal select option {
+  color: var(--text-normal);
+  background: var(--background-primary);
+  line-height: 1.35;
 }
 
 .session-input input:focus,
@@ -329,6 +367,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow: visible;
 }
 
 .session-modal label {
@@ -349,6 +388,16 @@
   background: var(--background-primary);
   color: var(--text-normal);
   padding: 8px 10px;
+}
+
+.session-modal input[type="checkbox"],
+.session-modal input[type="radio"] {
+  width: auto;
+  box-sizing: content-box;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  flex: 0 0 auto;
 }
 
 .session-modal textarea {
@@ -393,6 +442,15 @@
   padding: 4px 0;
 }
 
+.session-modal-row span {
+  color: var(--text-normal);
+}
+
+.session-modal-empty {
+  color: var(--text-muted);
+  font-size: 0.85em;
+}
+
 .session-modal-label {
   display: flex;
   gap: 6px;
@@ -408,6 +466,10 @@
 .session-modal-error {
   color: var(--text-error);
   font-size: 0.85em;
+}
+
+.lineage-form-modal .modal-content {
+  overflow: visible;
 }
 
 .session-placeholder {

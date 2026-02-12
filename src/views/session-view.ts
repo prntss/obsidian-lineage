@@ -1293,6 +1293,17 @@ export class SessionView extends ItemView {
     }
 
     const showAll = mode === "submit" || this.hasSubmitted;
+    if (!showAll && mode === "blur" && fieldKey) {
+      this.clearFieldMessage(fieldKey);
+      const fieldIssue = issues.find(
+        (issue) => issue.kind === "format" && issue.fieldKey === fieldKey
+      );
+      if (fieldIssue) {
+        this.setFieldMessage(fieldIssue.fieldKey, fieldIssue.text, fieldIssue.level);
+      }
+      return !hasBlockingErrors;
+    }
+
     this.clearFieldMessages();
 
     for (const issue of issues) {
@@ -1309,6 +1320,21 @@ export class SessionView extends ItemView {
     }
 
     return !hasBlockingErrors;
+  }
+
+  private clearFieldMessage(fieldKey: string): void {
+    const message = this.fieldMessages.get(fieldKey);
+    if (message) {
+      message.textContent = "";
+      message.classList.add("is-empty");
+      message.classList.remove("is-warning");
+    }
+
+    const control = this.fieldControls.get(fieldKey);
+    if (control) {
+      control.classList.remove("is-invalid");
+      control.setAttribute("aria-invalid", "false");
+    }
   }
 
   private clearFieldMessages(): void {
@@ -1522,6 +1548,7 @@ class AddPersonModal extends Modal {
   }
 
   onOpen(): void {
+    this.modalEl.addClass("lineage-form-modal");
     this.titleEl.setText("Add person");
     this.contentEl.empty();
 
@@ -1675,6 +1702,7 @@ class AddAssertionModal extends Modal {
   }
 
   onOpen(): void {
+    this.modalEl.addClass("lineage-form-modal");
     this.titleEl.setText("Add assertion");
     this.contentEl.empty();
 
@@ -1710,6 +1738,12 @@ class AddAssertionModal extends Modal {
       row.createEl("span", { text: person.name ?? person.id });
       this.participantInputs.push(checkbox);
     });
+    if (this.persons.length === 0) {
+      participantList.createDiv({
+        cls: "session-modal-empty",
+        text: "No persons in this session yet."
+      });
+    }
     this.participantSection.appendChild(participantList);
 
     this.parentChildSection = form.createDiv({ cls: "session-modal-parent-child" });
@@ -1781,8 +1815,11 @@ class AddAssertionModal extends Modal {
       const isParentChild = this.typeSelect.value === "parent-child";
       nameLabel.style.display = isIdentity ? "flex" : "none";
       sexLabel.style.display = isIdentity ? "flex" : "none";
+      this.participantSection.toggleAttribute("hidden", isParentChild);
+      this.parentChildSection.toggleAttribute("hidden", !isParentChild);
       this.participantSection.style.display = isParentChild ? "none" : "flex";
       this.parentChildSection.style.display = isParentChild ? "flex" : "none";
+      this.errorEl.textContent = "";
     };
     toggleTypeFields();
     this.typeSelect.addEventListener("change", toggleTypeFields);
