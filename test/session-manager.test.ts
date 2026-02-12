@@ -201,3 +201,25 @@ describe("SessionManager.serializeSession", () => {
     );
   });
 });
+
+describe("SessionManager.validateSession", () => {
+  it("uses the shared validation contract for blocking checks", () => {
+    const session = manager.parseSession(validContent);
+    session.metadata.repository = "";
+
+    const result = manager.validateSession(session);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain("Repository is required.");
+  });
+
+  it("keeps URL format issues non-blocking", () => {
+    const session = manager.parseSession(validContent);
+    session.session.session.document.url = "http://::::";
+
+    const result = manager.validateSession(session);
+
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+  });
+});

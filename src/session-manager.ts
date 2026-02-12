@@ -13,6 +13,7 @@ import {
   Source,
   ValidationResult
 } from "./types";
+import { evaluateSessionValidation } from "./session-validation";
 import { buildSessionTemplate } from "./templates/session-template";
 import { formatDate } from "./utils/date";
 import { slugify } from "./utils/slugify";
@@ -82,30 +83,11 @@ export class SessionManager {
   }
 
   validateSession(session: Session): ValidationResult {
-    const errors: string[] = [];
-
-    if (session.metadata.lineage_type !== "research_session") {
-      errors.push("lineage_type must be research_session");
-    }
-
-    if (!session.metadata.title.trim()) {
-      errors.push("title is required");
-    }
-
-    if (!session.session.session.id.trim()) {
-      errors.push("session.id is required");
-    }
-
-    const document = session.session.session.document;
-    const hasDocument =
-      Boolean(document.url?.trim()) ||
-      Boolean(document.file?.trim()) ||
-      Boolean(document.transcription?.trim());
-    if (!hasDocument) {
-      errors.push("session.document requires url, file, or transcription");
-    }
-
-    return { valid: errors.length === 0, errors };
+    const result = evaluateSessionValidation(session, { app: this.app });
+    const errors = result.issues
+      .filter((issue) => issue.level === "error")
+      .map((issue) => issue.text);
+    return { valid: !result.blocking, errors };
   }
 
   async createSessionFile(title: string): Promise<TFile> {

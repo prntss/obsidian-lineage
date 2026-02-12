@@ -12,6 +12,7 @@ import {
 import { computeCompositeScore, scoreName } from "../duplicate-matcher";
 import { LineageSettings } from "../settings";
 import { SessionManager } from "../session-manager";
+import { evaluateSessionValidation } from "../session-validation";
 import { Assertion, Person, Session } from "../types";
 import { VaultIndexer } from "../vault-indexer";
 import { ProjectionEngine } from "../projection/projection-engine";
@@ -36,7 +37,15 @@ export class SessionView extends ItemView {
   private saveSpinnerTimeout: number | null = null;
   private projectProgressTimeout: number | null = null;
   private hasSubmitted = false;
-  private saveStatus: "idle" | "saving" | "saved" | "error" = "idle";
+  private saveStatus:
+    | { state: "idle" }
+    | { state: "saving" }
+    | { state: "saved" }
+    | {
+        state: "failed";
+        reason: "validation_blocked" | "write_failed";
+        message: string;
+      } = { state: "idle" };
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -565,6 +574,15 @@ export class SessionView extends ItemView {
         const actions = document.createElement("div");
         actions.className = "session-row-actions";
 
+        const rematchButton = document.createElement("button");
+        rematchButton.type = "button";
+        rematchButton.className = "session-button";
+        rematchButton.textContent = person.matched_to ? "Rematch" : "Match";
+        rematchButton.addEventListener("click", () => {
+          this.openMatchModal(person);
+        });
+        actions.appendChild(rematchButton);
+
         const removeButton = document.createElement("button");
         removeButton.type = "button";
         removeButton.className = "session-button is-danger";
@@ -909,7 +927,7 @@ export class SessionView extends ItemView {
     const updates = this.currentSession;
     this.startSaveLoading();
     try {
-      this.updateSaveStatus("saving");
+      this.updateSaveStatus({ state: "saving" });
       this.skipNextRefresh = true;
       await this.app.vault.process(this.currentFile, (content) => {
         const session = this.sessionManager.parseSession(content);
@@ -928,13 +946,17 @@ export class SessionView extends ItemView {
         session.session.sources = updates.session.sources;
         return this.sessionManager.serializeSession(session);
       });
-      this.updateSaveStatus("saved");
+      this.updateSaveStatus({ state: "saved" });
     } catch (error) {
       this.skipNextRefresh = false;
       const message = error instanceof Error ? error.message : String(error);
       console.error("Failed to save session:", error);
       new Notice(`Failed to save session: ${message}`);
-      this.updateSaveStatus("error");
+      this.updateSaveStatus({
+        state: "failed",
+        reason: "write_failed",
+        message: `Failed to save session: ${message}`
+      });
       throw error;
     } finally {
       this.stopSaveLoading();
@@ -1170,19 +1192,44 @@ export class SessionView extends ItemView {
     }, delay);
   }
 
-  private updateSaveStatus(status: "idle" | "saving" | "saved" | "error"): void {
+  private updateSaveStatus(
+    status:
+      | { state: "idle" }
+      | { state: "saving" }
+      | { state: "saved" }
+      | {
+          state: "failed";
+          reason: "validation_blocked" | "write_failed";
+          message: string;
+        }
+  ): void {
     this.saveStatus = status;
     if (!this.saveStatusEl) {
       return;
     }
-
-    const textMap: Record<typeof status, string> = {
-      idle: "",
-      saving: "Saving…",
-      saved: "Saved ✓",
-      error: "Error ⚠"
-    };
-    this.saveStatusEl.textContent = textMap[status];
+    this.saveStatusEl.classList.remove("is-warning", "is-error");
+    this.saveStatusEl.removeAttribute("title");
+    if (status.state === "idle") {
+      this.saveStatusEl.textContent = "";
+      return;
+    }
+    if (status.state === "saving") {
+      this.saveStatusEl.textContent = "Saving…";
+      return;
+    }
+    if (status.state === "saved") {
+      this.saveStatusEl.textContent = "Saved ✓";
+      return;
+    }
+    if (status.reason === "validation_blocked") {
+      this.saveStatusEl.textContent = "Not saved: fix validation issues.";
+      this.saveStatusEl.classList.add("is-warning");
+      this.saveStatusEl.title = status.message;
+      return;
+    }
+    this.saveStatusEl.textContent = "Save failed ⚠";
+    this.saveStatusEl.classList.add("is-error");
+    this.saveStatusEl.title = status.message;
   }
 
   private refreshValidation(
@@ -1201,89 +1248,9 @@ export class SessionView extends ItemView {
       return false;
     }
 
-    type ValidationIssue = {
-      fieldKey: string;
-      text: string;
-      level: "error" | "warning";
-      kind: "required" | "format" | "conditional";
-    };
-
-    const issues: ValidationIssue[] = [];
-    const document = session.session.session.document;
-
-    if (!session.metadata.title.trim()) {
-      issues.push({
-        fieldKey: "metadata.title",
-        text: "Title is required.",
-        level: "error",
-        kind: "required"
-      });
-    }
-
-    if (!session.metadata.record_type?.trim()) {
-      issues.push({
-        fieldKey: "metadata.record_type",
-        text: "Record type is required.",
-        level: "error",
-        kind: "required"
-      });
-    }
-
-    if (!session.metadata.repository.trim()) {
-      issues.push({
-        fieldKey: "metadata.repository",
-        text: "Repository is required.",
-        level: "error",
-        kind: "required"
-      });
-    }
-
-    if (!session.metadata.locator.trim()) {
-      issues.push({
-        fieldKey: "metadata.locator",
-        text: "Locator is required.",
-        level: "error",
-        kind: "required"
-      });
-    }
-
-    const hasCapture =
-      Boolean(document.url?.trim()) ||
-      Boolean(document.file?.trim()) ||
-      Boolean(document.transcription?.trim());
-    if (!hasCapture) {
-      issues.push({
-        fieldKey: "document",
-        text: "Provide a URL, file, or transcription to save the document.",
-        level: "error",
-        kind: "conditional"
-      });
-    }
-
-    const filePath = document.file?.trim() ?? "";
-    if (filePath) {
-      const file = this.app.vault.getAbstractFileByPath(filePath);
-      if (!(file instanceof TFile)) {
-        issues.push({
-          fieldKey: "document.file",
-          text: "File not found in the vault.",
-          level: "error",
-          kind: "format"
-        });
-      }
-    }
-
-    const url = document.url?.trim() ?? "";
-    if (url && !this.isValidUrl(url)) {
-      issues.push({
-        fieldKey: "document.url",
-        text: "Invalid URL format.",
-        level: "error",
-        kind: "format"
-      });
-    }
-
-    const hasBlockingErrors = issues.some((issue) => issue.level === "error");
+    const validation = evaluateSessionValidation(session, { app: this.app });
+    const issues = validation.issues;
+    const hasBlockingErrors = validation.blocking;
     if (mode === "silent") {
       return !hasBlockingErrors;
     }
@@ -1375,15 +1342,6 @@ export class SessionView extends ItemView {
     }
   }
 
-  private isValidUrl(value: string): boolean {
-    try {
-      new URL(value);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
   private scheduleSave(delay = 400): void {
     if (this.saveTimeout) {
       window.clearTimeout(this.saveTimeout);
@@ -1406,9 +1364,11 @@ export class SessionView extends ItemView {
     const isManual = options.trigger === "manual";
     const isValid = this.refreshValidation(isManual ? "submit" : "silent");
     if (!isValid) {
-      if (isManual) {
-        this.updateSaveStatus("error");
-      }
+      this.updateSaveStatus({
+        state: "failed",
+        reason: "validation_blocked",
+        message: "Session contains blocking validation issues."
+      });
       return false;
     }
 
@@ -1455,6 +1415,7 @@ export class SessionView extends ItemView {
     this.projectProgressEl = null;
     this.saveStatusEl = null;
     this.hasSubmitted = false;
+    this.saveStatus = { state: "idle" };
 
     const placeholder = document.createElement("div");
     placeholder.className = "session-placeholder";
@@ -1479,6 +1440,7 @@ export class SessionView extends ItemView {
     this.projectProgressEl = null;
     this.saveStatusEl = null;
     this.hasSubmitted = false;
+    this.saveStatus = { state: "idle" };
 
     const error = document.createElement("div");
     error.className = "session-error";
@@ -1679,7 +1641,7 @@ class MatchModal extends Modal {
 class AddAssertionModal extends Modal {
   private typeSelect!: HTMLSelectElement;
   private participantInputs: HTMLInputElement[] = [];
-  private participantSection!: HTMLLabelElement;
+  private participantSection!: HTMLDivElement;
   private parentSelect!: HTMLSelectElement;
   private childSelect!: HTMLSelectElement;
   private parentChildSection!: HTMLDivElement;
@@ -1726,16 +1688,27 @@ class AddAssertionModal extends Modal {
     });
     typeLabel.appendChild(this.typeSelect);
 
-    this.participantSection = form.createEl("label", { text: "Participants" });
+    this.participantSection = form.createDiv({ cls: "session-modal-field" });
+    this.participantSection.createEl("div", {
+      cls: "session-modal-field-label",
+      text: "Participants"
+    });
     const participantList = this.participantSection.createDiv({
       cls: "session-modal-participants"
     });
     this.participantInputs = [];
-    this.persons.forEach((person) => {
-      const row = participantList.createDiv({ cls: "session-modal-row" });
+    this.persons.forEach((person, index) => {
+      const row = participantList.createDiv({
+        cls: "session-modal-row session-modal-choice"
+      });
       const checkbox = row.createEl("input", { type: "checkbox" });
+      checkbox.id = `assertion-participant-${index}-${person.id}`;
       checkbox.value = person.id;
-      row.createEl("span", { text: person.name ?? person.id });
+      const label = row.createEl("label", { text: person.name ?? person.id });
+      label.htmlFor = checkbox.id;
+      checkbox.addEventListener("change", () => {
+        row.classList.toggle("is-selected", checkbox.checked);
+      });
       this.participantInputs.push(checkbox);
     });
     if (this.persons.length === 0) {
@@ -1744,8 +1717,6 @@ class AddAssertionModal extends Modal {
         text: "No persons in this session yet."
       });
     }
-    this.participantSection.appendChild(participantList);
-
     this.parentChildSection = form.createDiv({ cls: "session-modal-parent-child" });
     const parentLabel = this.parentChildSection.createEl("label", { text: "Parent" });
     this.parentSelect = parentLabel.createEl("select");
@@ -1916,6 +1887,7 @@ class ProjectionSummaryModal extends Modal {
     const container = this.contentEl.createDiv({ cls: "session-modal" });
     this.renderFileSection(container, "Created", this.summary.created);
     this.renderFileSection(container, "Updated", this.summary.updated);
+    this.renderNoteSection(container, "Notes", this.summary.notes);
     this.renderErrorSection(container, "Errors", this.summary.errors);
 
     const actions = container.createDiv({ cls: "session-modal-actions" });
@@ -1928,6 +1900,19 @@ class ProjectionSummaryModal extends Modal {
     }
     const close = actions.createEl("button", { text: "Close" });
     close.addEventListener("click", () => this.close());
+  }
+
+  private renderNoteSection(container: HTMLElement, title: string, notes: string[]): void {
+    const section = container.createDiv({ cls: "session-modal-section" });
+    section.createEl("h3", { text: title });
+    if (notes.length === 0) {
+      section.createEl("p", { text: "None." });
+      return;
+    }
+    const list = section.createEl("ul");
+    notes.forEach((note) => {
+      list.createEl("li", { text: note });
+    });
   }
 
   private renderFileSection(container: HTMLElement, title: string, paths: string[]): void {

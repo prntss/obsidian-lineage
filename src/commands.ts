@@ -1,6 +1,7 @@
 import { App, Modal, Notice, Setting } from "obsidian";
 import LineagePlugin from "./main";
 import { ProjectionEngine } from "./projection/projection-engine";
+import { evaluateSessionValidation } from "./session-validation";
 
 class SessionTitleModal extends Modal {
   private value = "";
@@ -91,6 +92,14 @@ export function registerCommands(plugin: LineagePlugin): void {
       try {
         const content = await plugin.app.vault.read(file);
         const session = plugin.sessionManager.parseSession(content);
+        const validation = evaluateSessionValidation(session, { app: plugin.app });
+        if (validation.blocking) {
+          const first = validation.issues.find((issue) => issue.level === "error");
+          new Notice(
+            `Projection blocked: ${first?.text ?? "Fix session errors before projecting."}`
+          );
+          return;
+        }
         const engine = new ProjectionEngine({
           app: plugin.app,
           settings: plugin.settings,
@@ -100,13 +109,17 @@ export function registerCommands(plugin: LineagePlugin): void {
 
         const createdCount = summary.created.length;
         const updatedCount = summary.updated.length;
+        const noteCount = summary.notes.length;
         const errorCount = summary.errors.length;
         if (errorCount) {
           console.warn("Projection errors:", summary.errors);
         }
+        if (noteCount) {
+          console.info("Projection notes:", summary.notes);
+        }
 
         new Notice(
-          `Projection complete: ${createdCount} created, ${updatedCount} updated${errorCount ? `, ${errorCount} errors` : ""}.`
+          `Projection complete: ${createdCount} created, ${updatedCount} updated${noteCount ? `, ${noteCount} notes` : ""}${errorCount ? `, ${errorCount} errors` : ""}.`
         );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

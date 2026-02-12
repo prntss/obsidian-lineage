@@ -7,10 +7,24 @@ import { projectIdentityAssertions } from "./rules/identity";
 import { projectMarriageAssertions } from "./rules/marriage";
 import { projectParentChildAssertions } from "./rules/parent-child";
 import { projectResidenceAssertions } from "./rules/residence";
-import { ProjectionContext, ProjectionState, createEmptySummary } from "./types";
+import {
+  ProjectionContext,
+  ProjectionState,
+  ProjectionSummary,
+  createEmptySummary
+} from "./types";
 import { updateFrontmatter } from "./utils";
 
 export class ProjectionEngine {
+  private static readonly SUPPORTED_ASSERTION_TYPES = new Set([
+    "identity",
+    "birth",
+    "death",
+    "marriage",
+    "parent-child",
+    "residence"
+  ]);
+
   constructor(private context: ProjectionContext) {}
 
   async projectSession(session: Session, sessionFile?: TFile) {
@@ -30,12 +44,33 @@ export class ProjectionEngine {
     await projectParentChildAssertions(this.context, summary, state, session);
     await projectResidenceAssertions(this.context, summary, state, session);
     await projectCitations(this.context, summary, state, session);
+    this.appendProjectionCoverageNotes(summary, session);
 
     if (sessionFile) {
       await this.updateProjectedEntities(sessionFile, state);
     }
 
     return summary;
+  }
+
+  private appendProjectionCoverageNotes(
+    summary: ProjectionSummary,
+    session: Session
+  ): void {
+    const unsupportedCounts = new Map<string, number>();
+    for (const assertion of session.session.assertions) {
+      if (ProjectionEngine.SUPPORTED_ASSERTION_TYPES.has(assertion.type)) {
+        continue;
+      }
+      const count = unsupportedCounts.get(assertion.type) ?? 0;
+      unsupportedCounts.set(assertion.type, count + 1);
+    }
+
+    for (const [type, count] of unsupportedCounts) {
+      summary.notes.push(
+        `${count} ${type} assertion${count === 1 ? "" : "s"} not projected by design.`
+      );
+    }
   }
 
   private async updateProjectedEntities(

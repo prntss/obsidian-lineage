@@ -10,6 +10,7 @@ export type ProjectionSummary = {
   placesCreated: number;
   created: string[];
   updated: string[];
+  notes: string[];
   errors: string[];
 };
 
@@ -64,6 +65,7 @@ export function createEmptySummary(): ProjectionSummary {
     placesCreated: 0,
     created: [],
     updated: [],
+    notes: [],
     errors: []
   };
 }
