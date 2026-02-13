@@ -60,6 +60,13 @@ export function getMatchStatusDisplay(matchedTo: string | null | undefined): {
   return { text: "⚠ unmatched" };
 }
 
+type MatchModalFactory = (
+  app: App,
+  person: Person,
+  candidates: MatchCandidateView[],
+  onConfirm: (matchedTo: string | null) => void
+) => { open: () => void };
+
 export class SessionView extends ItemView {
   private currentFile: TFile | null = null;
   private currentSession: Session | null = null;
@@ -91,7 +98,13 @@ export class SessionView extends ItemView {
     leaf: WorkspaceLeaf,
     private sessionManager: SessionManager,
     private vaultIndexer: VaultIndexer,
-    private settings: LineageSettings
+    private settings: LineageSettings,
+    private createMatchModal: MatchModalFactory = (
+      app: App,
+      person: Person,
+      candidates: MatchCandidateView[],
+      onConfirm: (matchedTo: string | null) => void
+    ) => new MatchModal(app, person, candidates, onConfirm)
   ) {
     super(leaf);
   }
@@ -1181,7 +1194,7 @@ export class SessionView extends ItemView {
 
   private openMatchModal(person: Person): void {
     const candidates = this.buildMatchCandidates(person);
-    const modal = new MatchModal(this.app, person, candidates, (match) => {
+    const modal = this.createMatchModal(this.app, person, candidates, (match) => {
       person.matched_to = match ?? null;
       this.renderSession(this.currentSession!);
       this.scheduleIdleSave();
