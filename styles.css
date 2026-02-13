@@ -186,6 +186,23 @@
   margin-left: auto;
 }
 
+.session-button.is-icon {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  font-size: 0.95em;
+}
+
+.session-button.is-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
 .session-button.is-loading {
   padding-right: 28px;
 }
@@ -238,7 +255,7 @@
 
 .session-person-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   padding: 8px 10px;
   border: 1px solid var(--background-modifier-border);
@@ -246,8 +263,30 @@
   background: var(--background-primary);
 }
 
+.session-person-summary {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.session-person-name-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
 .session-person-name {
   font-weight: 600;
+  line-height: 1.2;
+}
+
+.session-person-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
 }
 
 .session-person-meta,
@@ -255,13 +294,11 @@
   color: var(--text-muted);
 }
 
-.session-person-status {
-  margin-left: auto;
-}
-
 .session-row-actions {
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .session-empty {
@@ -290,6 +327,17 @@
   align-items: center;
   gap: 8px;
   cursor: pointer;
+}
+
+.session-assertion-summary-label {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.session-summary-actions {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 6px;
 }
 
 .session-assertion-body {

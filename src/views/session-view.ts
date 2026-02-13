@@ -5,6 +5,7 @@ import {
   ItemView,
   Modal,
   Notice,
+  setIcon,
   TFile,
   ViewStateResult,
   WorkspaceLeaf
@@ -58,6 +59,45 @@ export function getMatchStatusDisplay(matchedTo: string | null | undefined): {
     };
   }
   return { text: "⚠ unmatched" };
+}
+
+export function getPotentialMatchLabel(
+  candidateCount: number
+): string | null {
+  if (candidateCount <= 0) {
+    return null;
+  }
+  const suffix = candidateCount === 1 ? "match" : "matches";
+  return `${candidateCount} potential ${suffix}`;
+}
+
+export function getPersonMatchSummary(
+  matchedTo: string | null | undefined,
+  candidateCount: number
+): string {
+  const matchStatus = getMatchStatusDisplay(matchedTo);
+  if (matchStatus.text === "✓ matched") {
+    return matchStatus.text;
+  }
+  const potentialMatchLabel = getPotentialMatchLabel(candidateCount);
+  if (!potentialMatchLabel) {
+    return matchStatus.text;
+  }
+  return `${matchStatus.text} | ${potentialMatchLabel}`;
+}
+
+export function getMatchConfirmButtonClass(): string {
+  return "session-button is-primary";
+}
+
+function setIconButtonContent(
+  button: HTMLButtonElement,
+  options: { icon: string; label: string }
+): void {
+  button.classList.add("is-icon");
+  setIcon(button, options.icon);
+  button.ariaLabel = options.label;
+  button.title = options.label;
 }
 
 export function getUnanchoredBlockingIssues(
@@ -236,6 +276,10 @@ export class SessionView extends ItemView {
       return;
     }
 
+    if (this.currentFile && this.currentSession && file.path === this.currentFile.path) {
+      return;
+    }
+
     await this.loadSession(file);
   }
 
@@ -266,7 +310,7 @@ export class SessionView extends ItemView {
 
       this.currentFile = file;
       this.currentSession = session;
-      this.renderSession(session);
+      this.renderSession(session, { preserveScroll: false });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (
@@ -284,8 +328,14 @@ export class SessionView extends ItemView {
     }
   }
 
-  private renderSession(session: Session): void {
+  private renderSession(
+    session: Session,
+    options: { preserveScroll?: boolean } = {}
+  ): void {
+    const preserveScroll = options.preserveScroll ?? true;
     const container = this.contentEl;
+    const previousContent = container.querySelector<HTMLElement>(".session-content");
+    const previousScrollTop = preserveScroll ? previousContent?.scrollTop ?? 0 : 0;
     container.empty();
     this.fieldMessages.clear();
     this.fieldControls.clear();
@@ -461,6 +511,12 @@ export class SessionView extends ItemView {
     content.appendChild(fragment);
     layout.appendChild(actionsSection);
     container.appendChild(layout);
+    if (preserveScroll && previousScrollTop > 0) {
+      content.scrollTop = previousScrollTop;
+      window.requestAnimationFrame(() => {
+        content.scrollTop = previousScrollTop;
+      });
+    }
 
     this.validateSessionFields(session, "silent");
   }
@@ -630,7 +686,7 @@ export class SessionView extends ItemView {
       const remove = document.createElement("button");
       remove.type = "button";
       remove.className = "session-button is-danger";
-      remove.textContent = "Remove";
+      setIconButtonContent(remove, { icon: "trash-2", label: "Remove file" });
       remove.addEventListener("click", options.onRemove);
       row.appendChild(remove);
     }
@@ -705,24 +761,40 @@ export class SessionView extends ItemView {
         const row = document.createElement("div");
         row.className = "session-person-row";
 
+        const summary = document.createElement("div");
+        summary.className = "session-person-summary";
+
+        const nameRow = document.createElement("div");
+        nameRow.className = "session-person-name-row";
+
         const name = document.createElement("span");
         name.className = "session-person-name";
         name.textContent = person.name?.trim() || "Unnamed person";
-        row.appendChild(name);
+        nameRow.appendChild(name);
 
-        const meta = document.createElement("span");
-        meta.className = "session-person-meta";
-        meta.textContent = person.sex ? `(${person.sex})` : "";
-        row.appendChild(meta);
+        if (person.sex) {
+          const sex = document.createElement("span");
+          sex.className = "session-person-meta";
+          sex.textContent = `(${person.sex})`;
+          nameRow.appendChild(sex);
+        }
+        summary.appendChild(nameRow);
+
+        const metaRow = document.createElement("div");
+        metaRow.className = "session-person-meta-row";
 
         const status = document.createElement("span");
         status.className = "session-person-status";
+        const candidateCount = this.buildMatchCandidates(person).length;
+        status.textContent = getPersonMatchSummary(person.matched_to, candidateCount);
         const matchStatus = getMatchStatusDisplay(person.matched_to);
-        status.textContent = matchStatus.text;
         if (matchStatus.title) {
           status.title = matchStatus.title;
         }
-        row.appendChild(status);
+        metaRow.appendChild(status);
+
+        summary.appendChild(metaRow);
+        row.appendChild(summary);
 
         const actions = document.createElement("div");
         actions.className = "session-row-actions";
@@ -736,13 +808,22 @@ export class SessionView extends ItemView {
         });
         actions.appendChild(rematchButton);
 
+        const editButton = document.createElement("button");
+        editButton.type = "button";
+        editButton.className = "session-button";
+        setIconButtonContent(editButton, { icon: "pencil", label: "Edit person" });
+        editButton.addEventListener("click", () => {
+          this.openEditPersonModal(person.id);
+        });
+        actions.appendChild(editButton);
+
         const removeButton = document.createElement("button");
         removeButton.type = "button";
         removeButton.className = "session-button is-danger";
-        removeButton.textContent = "Remove";
+        setIconButtonContent(removeButton, { icon: "trash-2", label: "Delete person" });
         removeButton.addEventListener("click", () => {
           const confirmed = window.confirm(
-            `Remove ${person.name ?? "this person"} from the session?`
+            `Delete ${person.name ?? "this person"} from the session?`
           );
           if (!confirmed) {
             return;
@@ -761,22 +842,7 @@ export class SessionView extends ItemView {
     addButton.className = "session-button";
     addButton.textContent = "Add person";
     addButton.addEventListener("click", () => {
-      if (!this.currentSession) {
-        return;
-      }
-      const modal = new AddPersonModal(this.app, (data) => {
-        const person: Person = {
-          id: this.nextPersonId(this.currentSession!.session.persons),
-          name: data.name,
-          sex: data.sex,
-          matched_to: null
-        };
-        this.currentSession!.session.persons.push(person);
-        this.renderSession(this.currentSession!);
-        this.scheduleIdleSave();
-        this.openMatchModal(person);
-      });
-      modal.open();
+      this.openAddPersonModal();
     });
 
     container.appendChild(list);
@@ -812,13 +878,27 @@ export class SessionView extends ItemView {
 
           const participantNames = this.getParticipantNames(assertion, personsById);
           const label = document.createElement("span");
+          label.className = "session-assertion-summary-label";
           label.textContent = this.describeAssertion(assertion, participantNames);
           summary.appendChild(label);
 
+          const actions = document.createElement("div");
+          actions.className = "session-summary-actions";
+
+          const editButton = document.createElement("button");
+          editButton.type = "button";
+          editButton.className = "session-button";
+          setIconButtonContent(editButton, { icon: "pencil", label: "Edit assertion" });
+          editButton.addEventListener("click", (event) => {
+            event.preventDefault();
+            this.openEditAssertionModal(assertion.id);
+          });
+          actions.appendChild(editButton);
+
           const deleteButton = document.createElement("button");
           deleteButton.type = "button";
-          deleteButton.className = "session-button is-danger is-inline";
-          deleteButton.textContent = "Delete";
+          deleteButton.className = "session-button is-danger";
+          setIconButtonContent(deleteButton, { icon: "trash-2", label: "Delete assertion" });
           deleteButton.addEventListener("click", (event) => {
             event.preventDefault();
             const confirmed = window.confirm("Delete this assertion?");
@@ -827,7 +907,8 @@ export class SessionView extends ItemView {
             }
             this.deleteAssertion(assertion.id);
           });
-          summary.appendChild(deleteButton);
+          actions.appendChild(deleteButton);
+          summary.appendChild(actions);
 
           details.appendChild(summary);
 
@@ -1060,6 +1141,44 @@ export class SessionView extends ItemView {
       this.vaultIndexer,
       (result) => {
         this.addAssertion(result);
+      },
+      {
+        mode: "add",
+        onRequestAddPerson: (draft) => {
+          this.openAddPersonModal({
+            autoOpenMatch: false,
+            onClose: () => {
+              this.openAddAssertionModalWithDraft(draft);
+            }
+          });
+        }
+      }
+    );
+    modal.open();
+  }
+
+  private openAddAssertionModalWithDraft(draft: AddAssertionResult): void {
+    if (!this.currentSession) {
+      return;
+    }
+    const modal = new AddAssertionModal(
+      this.app,
+      this.currentSession.session.persons,
+      this.vaultIndexer,
+      (result) => {
+        this.addAssertion(result);
+      },
+      {
+        mode: "add",
+        initialResult: draft,
+        onRequestAddPerson: (nextDraft) => {
+          this.openAddPersonModal({
+            autoOpenMatch: false,
+            onClose: () => {
+              this.openAddAssertionModalWithDraft(nextDraft);
+            }
+          });
+        }
       }
     );
     modal.open();
@@ -1308,6 +1427,226 @@ export class SessionView extends ItemView {
 
     this.renderSession(session);
     this.scheduleIdleSave();
+  }
+
+  private updateAssertion(assertionId: string, result: AddAssertionResult): void {
+    if (!this.currentSession) {
+      return;
+    }
+    const session = this.currentSession;
+    const assertion = session.session.assertions.find((entry) => entry.id === assertionId);
+    if (!assertion) {
+      return;
+    }
+
+    const existingCitationId = assertion.citations?.[0];
+    const hasCitationContent =
+      !!result.citationSnippet || !!result.citationLocator || !!result.sourceId;
+    let citationId: string | undefined;
+
+    if (hasCitationContent) {
+      citationId = existingCitationId ?? this.nextCitationId(session.session.citations);
+      const existingCitation = session.session.citations.find(
+        (citation) => citation.id === citationId
+      );
+      if (existingCitation) {
+        existingCitation.snippet = result.citationSnippet || undefined;
+        existingCitation.locator = result.citationLocator || undefined;
+        existingCitation.source_id = result.sourceId || existingCitation.source_id;
+      } else {
+        session.session.citations.push({
+          id: citationId,
+          source_id: result.sourceId,
+          snippet: result.citationSnippet || undefined,
+          locator: result.citationLocator || undefined
+        });
+      }
+    } else if (existingCitationId) {
+      session.session.citations = session.session.citations.filter(
+        (citation) => citation.id !== existingCitationId
+      );
+    }
+
+    assertion.type = result.type;
+    assertion.participants = result.participants
+      ? result.participants.map((personRef) => ({ person_ref: personRef }))
+      : undefined;
+    assertion.parent_ref = result.parentRef;
+    assertion.child_ref = result.childRef;
+    assertion.date = result.date || undefined;
+    assertion.place = result.place || undefined;
+    assertion.statement = result.statement || undefined;
+    assertion.name = result.name || undefined;
+    assertion.sex = result.sex || undefined;
+    assertion.citations = citationId ? [citationId] : undefined;
+
+    this.renderSession(session);
+    this.scheduleIdleSave();
+  }
+
+  private openEditAssertionModal(assertionId: string): void {
+    if (!this.currentSession) {
+      return;
+    }
+    const session = this.currentSession;
+    const assertion = session.session.assertions.find((entry) => entry.id === assertionId);
+    if (!assertion) {
+      return;
+    }
+    const citationId = assertion.citations?.[0];
+    const citation = citationId
+      ? session.session.citations.find((entry) => entry.id === citationId)
+      : undefined;
+    const initialResult: AddAssertionResult = {
+      type: assertion.type,
+      participants: assertion.participants?.map((participant) => participant.person_ref),
+      parentRef: assertion.parent_ref,
+      childRef: assertion.child_ref,
+      date: typeof assertion.date === "string" ? assertion.date : undefined,
+      place: typeof assertion.place === "string" ? assertion.place : undefined,
+      statement: typeof assertion.statement === "string" ? assertion.statement : undefined,
+      name: typeof assertion.name === "string" ? assertion.name : undefined,
+      sex: typeof assertion.sex === "string" ? assertion.sex : undefined,
+      citationSnippet: citation?.snippet,
+      citationLocator: citation?.locator,
+      sourceId: citation?.source_id
+    };
+    const modal = new AddAssertionModal(
+      this.app,
+      session.session.persons,
+      this.vaultIndexer,
+      (result) => {
+        this.updateAssertion(assertionId, result);
+      },
+      {
+        mode: "edit",
+        initialResult,
+        onRequestAddPerson: (draft) => {
+          this.openAddPersonModal({
+            autoOpenMatch: false,
+            onClose: () => {
+              this.openEditAssertionModalWithDraft(assertionId, draft);
+            }
+          });
+        }
+      }
+    );
+    modal.open();
+  }
+
+  private openEditAssertionModalWithDraft(
+    assertionId: string,
+    draft: AddAssertionResult
+  ): void {
+    if (!this.currentSession) {
+      return;
+    }
+    const modal = new AddAssertionModal(
+      this.app,
+      this.currentSession.session.persons,
+      this.vaultIndexer,
+      (result) => {
+        this.updateAssertion(assertionId, result);
+      },
+      {
+        mode: "edit",
+        initialResult: draft,
+        onRequestAddPerson: (nextDraft) => {
+          this.openAddPersonModal({
+            autoOpenMatch: false,
+            onClose: () => {
+              this.openEditAssertionModalWithDraft(assertionId, nextDraft);
+            }
+          });
+        }
+      }
+    );
+    modal.open();
+  }
+
+  private openEditPersonModal(personId: string): void {
+    if (!this.currentSession) {
+      return;
+    }
+    const person = this.currentSession.session.persons.find((entry) => entry.id === personId);
+    if (!person) {
+      return;
+    }
+    this.openAddPersonModal({
+      title: "Edit person",
+      submitText: "Save",
+      initialData: {
+        name: person.name?.trim() || "",
+        sex: person.sex
+      },
+      autoOpenMatch: false,
+      onSubmit: (data) => {
+        this.updatePerson(personId, data);
+      }
+    });
+  }
+
+  private updatePerson(
+    personId: string,
+    data: {
+      name: string;
+      sex?: string;
+    }
+  ): void {
+    if (!this.currentSession) {
+      return;
+    }
+    const person = this.currentSession.session.persons.find((entry) => entry.id === personId);
+    if (!person) {
+      return;
+    }
+    person.name = data.name;
+    person.sex = data.sex;
+  }
+
+  private openAddPersonModal(options?: {
+    title?: string;
+    submitText?: string;
+    initialData?: { name: string; sex?: string };
+    autoOpenMatch?: boolean;
+    onSubmit?: (data: { name: string; sex?: string }) => void;
+    onClose?: () => void;
+  }): void {
+    const modal = new AddPersonModal(
+      this.app,
+      (data) => {
+        if (!this.currentSession) {
+          return;
+        }
+        if (options?.onSubmit) {
+          options.onSubmit(data);
+          this.renderSession(this.currentSession);
+          this.scheduleIdleSave();
+          return;
+        }
+        const person: Person = {
+          id: this.nextPersonId(this.currentSession.session.persons),
+          name: data.name,
+          sex: data.sex,
+          matched_to: null
+        };
+        this.currentSession.session.persons.push(person);
+        this.renderSession(this.currentSession);
+        this.scheduleIdleSave();
+        if (options?.autoOpenMatch !== false) {
+          this.openMatchModal(person);
+        }
+      },
+      {
+        title: options?.title ?? "Add person",
+        submitText: options?.submitText ?? "Add",
+        initialData: options?.initialData,
+        onClose: () => {
+          options?.onClose?.();
+        }
+      }
+    );
+    modal.open();
   }
 
   private deleteAssertion(assertionId: string): void {
@@ -1753,13 +2092,22 @@ class AddPersonModal extends Modal {
   private sexSelect!: HTMLSelectElement;
   private errorEl!: HTMLDivElement;
 
-  constructor(app: App, private onSubmit: (data: { name: string; sex?: string }) => void) {
+  constructor(
+    app: App,
+    private onSubmit: (data: { name: string; sex?: string }) => void,
+    private options: {
+      title?: string;
+      submitText?: string;
+      initialData?: { name: string; sex?: string };
+      onClose?: () => void;
+    } = {}
+  ) {
     super(app);
   }
 
   onOpen(): void {
     this.modalEl.addClass("lineage-form-modal");
-    this.titleEl.setText("Add person");
+    this.titleEl.setText(this.options.title ?? "Add person");
     this.contentEl.empty();
 
     const form = this.contentEl.createDiv({ cls: "session-modal" });
@@ -1778,6 +2126,10 @@ class AddPersonModal extends Modal {
       this.sexSelect.appendChild(option);
     });
     sexLabel.appendChild(this.sexSelect);
+    if (this.options.initialData) {
+      this.nameInput.value = this.options.initialData.name ?? "";
+      this.sexSelect.value = this.options.initialData.sex ?? "";
+    }
 
     this.errorEl = form.createDiv({ cls: "session-modal-error" });
 
@@ -1785,7 +2137,7 @@ class AddPersonModal extends Modal {
     const cancel = actions.createEl("button", { text: "Cancel" });
     cancel.addEventListener("click", () => this.close());
 
-    const submit = actions.createEl("button", { text: "Add" });
+    const submit = actions.createEl("button", { text: this.options.submitText ?? "Add" });
     submit.addEventListener("click", () => {
       const name = this.nameInput.value.trim();
       if (!name) {
@@ -1795,6 +2147,10 @@ class AddPersonModal extends Modal {
       this.onSubmit({ name, sex: this.sexSelect.value || undefined });
       this.close();
     });
+  }
+
+  onClose(): void {
+    this.options.onClose?.();
   }
 }
 
@@ -1862,6 +2218,7 @@ class MatchModal extends Modal {
     cancel.addEventListener("click", () => this.close());
 
     const confirm = actions.createEl("button", { text: "Confirm" });
+    confirm.className = getMatchConfirmButtonClass();
     confirm.addEventListener("click", () => {
       const selected = this.contentEl.querySelector<HTMLInputElement>(
         'input[name="match-choice"]:checked'
@@ -1906,14 +2263,20 @@ class AddAssertionModal extends Modal {
     app: App,
     private persons: Person[],
     private vaultIndexer: VaultIndexer,
-    private onSubmit: (result: AddAssertionResult) => void
+    private onSubmit: (result: AddAssertionResult) => void,
+    private options: {
+      mode?: "add" | "edit";
+      initialResult?: AddAssertionResult;
+      onRequestAddPerson?: (draft: AddAssertionResult) => void;
+    } = {}
   ) {
     super(app);
   }
 
   onOpen(): void {
     this.modalEl.addClass("lineage-form-modal");
-    this.titleEl.setText("Add assertion");
+    const isEditMode = this.options.mode === "edit";
+    this.titleEl.setText(isEditMode ? "Edit assertion" : "Add assertion");
     this.contentEl.empty();
 
     const form = this.contentEl.createDiv({ cls: "session-modal" });
@@ -1980,6 +2343,19 @@ class AddAssertionModal extends Modal {
       option.textContent = person.name ?? person.id;
     });
 
+    const parentChildHint = this.parentChildSection.createDiv({
+      cls: "session-modal-empty"
+    });
+    const addPersonButton = this.parentChildSection.createEl("button", {
+      text: "Add person"
+    });
+    addPersonButton.type = "button";
+    addPersonButton.className = "session-button is-inline";
+    addPersonButton.addEventListener("click", () => {
+      this.options.onRequestAddPerson?.(this.collectDraft());
+      this.close();
+    });
+
     const dateLabel = form.createEl("label", { text: "Date" });
     this.dateInput = form.createEl("input", { type: "text" });
     this.dateInput.placeholder = "YYYY-MM-DD or ~1872";
@@ -2023,12 +2399,30 @@ class AddAssertionModal extends Modal {
 
     const toggleTypeFields = () => {
       const visibility = getAssertionModalVisibility(this.typeSelect.value);
+      const needsPersonContinuation = this.persons.length < 2;
       nameLabel.toggleAttribute("hidden", !visibility.showIdentityFields);
       sexLabel.toggleAttribute("hidden", !visibility.showIdentityFields);
       this.participantSection.toggleAttribute("hidden", !visibility.showParticipants);
       this.parentChildSection.toggleAttribute("hidden", !visibility.showParentChild);
+      parentChildHint.toggleAttribute(
+        "hidden",
+        !visibility.showParentChild || !needsPersonContinuation
+      );
+      addPersonButton.toggleAttribute(
+        "hidden",
+        !visibility.showParentChild || !needsPersonContinuation
+      );
+      if (needsPersonContinuation) {
+        parentChildHint.textContent =
+          this.persons.length === 0
+            ? "No persons in this session yet."
+            : "Parent-child assertions require at least two people.";
+      } else {
+        parentChildHint.textContent = "";
+      }
       this.errorEl.textContent = "";
     };
+    this.applyInitialResult();
     toggleTypeFields();
     this.typeSelect.addEventListener("change", toggleTypeFields);
 
@@ -2036,14 +2430,15 @@ class AddAssertionModal extends Modal {
     const cancel = actions.createEl("button", { text: "Cancel" });
     cancel.addEventListener("click", () => this.close());
 
-    const submit = actions.createEl("button", { text: "Add assertion" });
+    const submit = actions.createEl("button", {
+      text: isEditMode ? "Save assertion" : "Add assertion"
+    });
     submit.addEventListener("click", () => {
-      const type = this.typeSelect.value;
-      const participants = this.participantInputs
-        .filter((input) => input.checked)
-        .map((input) => input.value);
-      const parentRef = this.parentSelect?.value || undefined;
-      const childRef = this.childSelect?.value || undefined;
+      const draft = this.collectDraft();
+      const type = draft.type;
+      const participants = draft.participants ?? [];
+      const parentRef = draft.parentRef;
+      const childRef = draft.childRef;
       const isParentChild = type === "parent-child";
 
       if (isParentChild) {
@@ -2060,23 +2455,65 @@ class AddAssertionModal extends Modal {
         return;
       }
 
-      const result: AddAssertionResult = {
+      this.onSubmit({
         type,
         participants: isParentChild ? undefined : participants,
         parentRef: isParentChild ? parentRef : undefined,
         childRef: isParentChild ? childRef : undefined,
-        date: this.dateInput.value.trim(),
-        place: this.placeInput.value.trim(),
-        statement: this.statementInput.value.trim(),
-        name: this.nameInput.value.trim(),
-        sex: this.sexSelect.value || undefined,
-        citationSnippet: this.citationSnippetInput.value.trim(),
-        citationLocator: this.citationLocatorInput.value.trim()
-      };
-
-      this.onSubmit(result);
+        date: draft.date,
+        place: draft.place,
+        statement: draft.statement,
+        name: draft.name,
+        sex: draft.sex,
+        citationSnippet: draft.citationSnippet,
+        citationLocator: draft.citationLocator
+      });
       this.close();
     });
+  }
+
+  private applyInitialResult(): void {
+    const initial = this.options.initialResult;
+    if (!initial) {
+      return;
+    }
+    if (initial.type && ADD_ASSERTION_TYPES.includes(initial.type as (typeof ADD_ASSERTION_TYPES)[number])) {
+      this.typeSelect.value = initial.type;
+    }
+    const participantSet = new Set(initial.participants ?? []);
+    this.participantInputs.forEach((input) => {
+      const selected = participantSet.has(input.value);
+      input.checked = selected;
+      input.parentElement?.classList.toggle("is-selected", selected);
+    });
+    this.parentSelect.value = initial.parentRef ?? "";
+    this.childSelect.value = initial.childRef ?? "";
+    this.dateInput.value = initial.date ?? "";
+    this.placeInput.value = initial.place ?? "";
+    this.statementInput.value = initial.statement ?? "";
+    this.nameInput.value = initial.name ?? "";
+    this.sexSelect.value = initial.sex ?? "";
+    this.citationSnippetInput.value = initial.citationSnippet ?? "";
+    this.citationLocatorInput.value = initial.citationLocator ?? "";
+  }
+
+  private collectDraft(): AddAssertionResult {
+    const type = this.typeSelect.value;
+    return {
+      type,
+      participants: this.participantInputs
+        .filter((input) => input.checked)
+        .map((input) => input.value),
+      parentRef: this.parentSelect?.value || undefined,
+      childRef: this.childSelect?.value || undefined,
+      date: this.dateInput.value.trim(),
+      place: this.placeInput.value.trim(),
+      statement: this.statementInput.value.trim(),
+      name: this.nameInput.value.trim(),
+      sex: this.sexSelect.value || undefined,
+      citationSnippet: this.citationSnippetInput.value.trim(),
+      citationLocator: this.citationLocatorInput.value.trim()
+    };
   }
 }
 
