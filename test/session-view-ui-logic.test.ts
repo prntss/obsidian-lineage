@@ -25,7 +25,7 @@ function buildSession(persons: Person[]): Session {
     session: {
       session: {
         id: "session-1",
-        document: {}
+        document: { files: [] }
       },
       sources: [],
       persons,
@@ -290,6 +290,126 @@ describe("session-view ui logic", () => {
         }
         vi.useRealTimers();
       }
+    });
+  });
+
+  describe("person deletion integrity guard", () => {
+    it("blocks deleting a person referenced by assertion participants", () => {
+      const leaf = new WorkspaceLeaf();
+      const view = new SessionView(
+        leaf,
+        new SessionManager(),
+        { getPersonEntries: () => [] } as never,
+        { baseFolder: "Lineage" }
+      ) as unknown as SessionView & Record<string, unknown>;
+      view.currentSession = {
+        ...buildSession([
+          { id: "p1", name: "John Doe" },
+          { id: "p2", name: "Jane Doe" }
+        ]),
+        session: {
+          ...buildSession([]).session,
+          session: { id: "session-1", document: { files: [] } },
+          persons: [
+            { id: "p1", name: "John Doe" },
+            { id: "p2", name: "Jane Doe" }
+          ],
+          assertions: [{ id: "a1", type: "birth", participants: [{ person_ref: "p1" }] }],
+          citations: [],
+          sources: []
+        }
+      };
+      view.renderSession = vi.fn();
+      view.scheduleSave = vi.fn();
+
+      (view as Record<string, unknown>).removePerson("p1");
+
+      expect(view.currentSession?.session.persons.map((person) => person.id)).toEqual([
+        "p1",
+        "p2"
+      ]);
+      expect((view as Record<string, unknown>).personActionMessage).toContain(
+        "Cannot remove person: referenced by 1 assertion (a1)."
+      );
+      expect(view.renderSession).not.toHaveBeenCalled();
+      expect(view.scheduleSave).not.toHaveBeenCalled();
+    });
+
+    it("blocks deleting a person referenced by parent-child assertion", () => {
+      const leaf = new WorkspaceLeaf();
+      const view = new SessionView(
+        leaf,
+        new SessionManager(),
+        { getPersonEntries: () => [] } as never,
+        { baseFolder: "Lineage" }
+      ) as unknown as SessionView & Record<string, unknown>;
+      view.currentSession = {
+        ...buildSession([
+          { id: "p1", name: "Parent" },
+          { id: "p2", name: "Child" }
+        ]),
+        session: {
+          ...buildSession([]).session,
+          session: { id: "session-1", document: { files: [] } },
+          persons: [
+            { id: "p1", name: "Parent" },
+            { id: "p2", name: "Child" }
+          ],
+          assertions: [{ id: "a1", type: "parent-child", parent_ref: "p1", child_ref: "p2" }],
+          citations: [],
+          sources: []
+        }
+      };
+      view.renderSession = vi.fn();
+      view.scheduleSave = vi.fn();
+
+      (view as Record<string, unknown>).removePerson("p1");
+
+      expect(view.currentSession?.session.persons.map((person) => person.id)).toEqual([
+        "p1",
+        "p2"
+      ]);
+      expect((view as Record<string, unknown>).personActionMessage).toContain(
+        "Cannot remove person: referenced by 1 assertion (a1)."
+      );
+      expect(view.renderSession).not.toHaveBeenCalled();
+      expect(view.scheduleSave).not.toHaveBeenCalled();
+    });
+
+    it("allows deleting a person with no assertion references", () => {
+      const leaf = new WorkspaceLeaf();
+      const view = new SessionView(
+        leaf,
+        new SessionManager(),
+        { getPersonEntries: () => [] } as never,
+        { baseFolder: "Lineage" }
+      ) as unknown as SessionView & Record<string, unknown>;
+      view.currentSession = {
+        ...buildSession([
+          { id: "p1", name: "John Doe" },
+          { id: "p2", name: "Jane Doe" }
+        ]),
+        session: {
+          ...buildSession([]).session,
+          session: { id: "session-1", document: { files: [] } },
+          persons: [
+            { id: "p1", name: "John Doe" },
+            { id: "p2", name: "Jane Doe" }
+          ],
+          assertions: [{ id: "a1", type: "birth", participants: [{ person_ref: "p2" }] }],
+          citations: [],
+          sources: []
+        }
+      };
+      view.renderSession = vi.fn();
+      view.scheduleSave = vi.fn();
+
+      (view as Record<string, unknown>).removePerson("p1");
+
+      expect(view.currentSession?.session.persons.map((person) => person.id)).toEqual(["p2"]);
+      expect((view as Record<string, unknown>).personActionMessage).toBeNull();
+      expect(view.renderSession).toHaveBeenCalledTimes(1);
+      expect(view.scheduleSave).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -18,7 +18,7 @@ export type SessionMetadata = {
 
 export type SessionDocument = {
   url?: string;
-  file?: string;
+  files?: string[];
   transcription?: string;
 };
 

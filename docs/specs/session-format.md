@@ -52,7 +52,7 @@ Flow 2: Parse contract when loading/editing
 - `projected_entities` must be a string array
 3. Session block requirements:
 - `session.id` required string
-- `session.document` required object (`url|file|transcription` optional strings)
+- `session.document` required object (`url|files|transcription` optional values; `files` is `string[]`)
 - each item in `sources/persons/assertions/citations` must have `id`
 - assertions require `type`; participants entries require `person_ref`
 - additional fields are preserved (passthrough model)
@@ -65,9 +65,9 @@ Flow 3: Save and serialization behavior
 - `lineage-session` block
 3. Session panel validation for save requires:
 - title, record type, repository, locator
-- at least one document capture field (`url|file|transcription`)
+- at least one document capture field (`url|files[]|transcription`)
 - valid URL format when URL is provided
-- vault file existence when file path is provided
+- vault file existence when one or more file paths are provided
 4. Manual save shows errors; autosave uses silent validation and skips invalid writes.
 
 Flow 4: Projection coupling
@@ -87,7 +87,7 @@ Flow 4: Projection coupling
 | Parse result | Invalid YAML/schema type | Error UI + notice |
 | Save trigger | Manual save | Submit-mode validation + visible errors |
 | Save trigger | Autosave/idle save | Silent validation; invalid state not persisted |
-| Document capture | Any of URL/file/transcription set | Passes document presence check |
+| Document capture | Any of URL/files/transcription set | Passes document presence check |
 | Document capture | None set | Save blocked |
 | URL format | Valid URL | Accepted |
 | URL format | Invalid URL string | Save blocked |
@@ -185,6 +185,7 @@ Flow 4: Projection coupling
 - Validation is now evaluated through a shared contract module used by SessionView, SessionManager, and command projection preflight.
 - Locator remains required text. URL-like locator strings are soft-validated and can produce warnings (non-blocking).
 - Document URL format is warning-only (non-blocking) and accepts bare domains (for example `google.com`).
+- Session document uses `files: string[]` as canonical file linkage; parser migrates legacy `document.file` into `document.files`.
 - Save/project blocking now includes referential-integrity checks:
   - assertion participants must reference existing session persons
   - parent/child refs must exist and be distinct

@@ -39,7 +39,7 @@ describe("buildSessionTemplate", () => {
     expect(parsed.metadata.repository).toBe("County \"Archive\"");
     expect(parsed.metadata.locator).toBe("Shelf A\nRow 2");
     expect(parsed.session.session.document.url).toBe("https://example.com/?q=\"smith\"");
-    expect(parsed.session.session.document.file).toBe("Sources/line\nbreak.txt");
+    expect(parsed.session.session.document.files).toEqual(["Sources/line\nbreak.txt"]);
     expect(parsed.session.session.document.transcription).toBe(
       "line 1\n\"quoted\" line 2"
     );

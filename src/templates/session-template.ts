@@ -9,6 +9,8 @@ export type SessionTemplateOptions = {
   repository?: string;
   locator?: string;
   documentUrl?: string;
+  documentFiles?: string[];
+  // Legacy option kept for backward compatibility with existing callers.
   documentFile?: string;
   documentTranscription?: string;
 };
@@ -22,7 +24,7 @@ export function buildSessionTemplate(
   const repository = options.repository ?? "";
   const locator = options.locator ?? "";
   const documentUrl = options.documentUrl ?? "";
-  const documentFile = options.documentFile ?? "";
+  const documentFiles = options.documentFiles ?? (options.documentFile ? [options.documentFile] : []);
   const documentTranscription = options.documentTranscription ?? "";
   const sessionId = generateSessionId();
   const metadata = {
@@ -39,7 +41,7 @@ export function buildSessionTemplate(
       id: sessionId,
       document: {
         url: documentUrl,
-        file: documentFile,
+        files: documentFiles,
         transcription: documentTranscription
       }
     },

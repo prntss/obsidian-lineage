@@ -229,7 +229,7 @@ export class SessionManager {
   private parseDocument(value: unknown): SessionDocument {
     const record = this.ensureRecord(value, "session.document");
     const url = this.validateOptionalString(record.url, "session.document.url");
-    const file = this.validateOptionalString(record.file, "session.document.file");
+    const files = this.parseDocumentFiles(record);
     const transcription = this.validateOptionalString(
       record.transcription,
       "session.document.transcription"
@@ -237,9 +237,22 @@ export class SessionManager {
 
     return {
       url: url ?? "",
-      file: file ?? "",
+      files,
       transcription: transcription ?? ""
     };
+  }
+
+  private parseDocumentFiles(record: Record<string, unknown>): string[] {
+    if (record.files !== undefined) {
+      return this.parseStringArray(record.files, "session.document.files");
+    }
+
+    const legacyFile = this.validateOptionalString(record.file, "session.document.file");
+    if (!legacyFile) {
+      return [];
+    }
+
+    return [legacyFile];
   }
 
   private parseSource(record: Record<string, unknown>, index: number): Source {
