@@ -12,7 +12,7 @@ import {
 import { computeCompositeScore, scoreName } from "../duplicate-matcher";
 import { LineageSettings } from "../settings";
 import { SessionManager } from "../session-manager";
-import { evaluateSessionValidation } from "../session-validation";
+import { SessionValidationIssue, evaluateSessionValidation } from "../session-validation";
 import { Assertion, Person, Session } from "../types";
 import { VaultIndexer } from "../vault-indexer";
 import { ProjectionEngine } from "../projection/projection-engine";
@@ -60,6 +60,27 @@ export function getMatchStatusDisplay(matchedTo: string | null | undefined): {
   return { text: "⚠ unmatched" };
 }
 
+export function getUnanchoredBlockingIssues(
+  issues: SessionValidationIssue[],
+  hasFieldControl: (fieldKey: string) => boolean
+): SessionValidationIssue[] {
+  const unique = new Map<string, SessionValidationIssue>();
+  for (const issue of issues) {
+    if (issue.level !== "error" || hasFieldControl(issue.fieldKey)) {
+      continue;
+    }
+    const key = `${issue.fieldKey}|${issue.code}|${issue.text}`;
+    if (!unique.has(key)) {
+      unique.set(key, issue);
+    }
+  }
+  return Array.from(unique.values()).sort((a, b) => {
+    const aKey = `${a.fieldKey}:${a.code}:${a.text}`;
+    const bKey = `${b.fieldKey}:${b.code}:${b.text}`;
+    return aKey.localeCompare(bKey);
+  });
+}
+
 type MatchModalFactory = (
   app: App,
   person: Person,
@@ -78,6 +99,7 @@ export class SessionView extends ItemView {
   private fieldMessages = new Map<string, HTMLDivElement>();
   private fieldControls = new Map<string, HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>();
   private saveStatusEl: HTMLSpanElement | null = null;
+  private validationSummaryEl: HTMLDivElement | null = null;
   private saveButtonEl: HTMLButtonElement | null = null;
   private projectButtonEl: HTMLButtonElement | null = null;
   private projectProgressEl: HTMLDivElement | null = null;
@@ -151,6 +173,7 @@ export class SessionView extends ItemView {
     this.projectButtonEl = null;
     this.projectProgressEl = null;
     this.saveStatusEl = null;
+    this.validationSummaryEl = null;
     this.clearTimeouts();
   }
 
@@ -826,6 +849,11 @@ export class SessionView extends ItemView {
     this.saveStatusEl = status;
     this.updateSaveStatus(this.saveStatus);
 
+    const validationSummary = document.createElement("div");
+    validationSummary.className = "session-validation-summary is-hidden";
+    validationSummary.setAttribute("aria-live", "polite");
+    this.validationSummaryEl = validationSummary;
+
     const progress = document.createElement("div");
     progress.className = "session-project-progress is-hidden";
     const progressBar = document.createElement("div");
@@ -834,6 +862,7 @@ export class SessionView extends ItemView {
     this.projectProgressEl = progress;
 
     container.appendChild(row);
+    container.appendChild(validationSummary);
     container.appendChild(progress);
   }
 
@@ -864,6 +893,13 @@ export class SessionView extends ItemView {
         vaultIndexer: this.vaultIndexer
       });
       const summary = await engine.projectSession(this.currentSession, this.currentFile);
+      this.renderSession(this.currentSession);
+      try {
+        await this.persistSession();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        summary.errors.push(`Projection completed, but session save failed: ${message}`);
+      }
       const modal = new ProjectionSummaryModal(this.app, summary, {
         onRetry: () => {
           void this.projectSession();
@@ -1291,6 +1327,34 @@ export class SessionView extends ItemView {
     return this.validateSessionFields(this.currentSession, mode, fieldKey);
   }
 
+  private clearValidationSummary(): void {
+    if (!this.validationSummaryEl) {
+      return;
+    }
+    this.validationSummaryEl.empty();
+    this.validationSummaryEl.classList.add("is-hidden");
+  }
+
+  private renderValidationSummary(issues: SessionValidationIssue[]): void {
+    if (!this.validationSummaryEl) {
+      return;
+    }
+    const unanchored = getUnanchoredBlockingIssues(
+      issues,
+      (fieldKey) => this.fieldControls.has(fieldKey)
+    );
+    this.validationSummaryEl.empty();
+    if (unanchored.length === 0) {
+      this.validationSummaryEl.classList.add("is-hidden");
+      return;
+    }
+    this.validationSummaryEl.classList.remove("is-hidden");
+    const list = this.validationSummaryEl.createEl("ul");
+    for (const issue of unanchored) {
+      list.createEl("li", { text: issue.text });
+    }
+  }
+
   private validateSessionFields(
     session: Session | null,
     mode: "silent" | "blur" | "submit",
@@ -1337,6 +1401,7 @@ export class SessionView extends ItemView {
       }
       this.setFieldMessage(issue.fieldKey, issue.text, issue.level);
     }
+    this.renderValidationSummary(issues);
 
     return !hasBlockingErrors;
   }
@@ -1416,6 +1481,10 @@ export class SessionView extends ItemView {
     const isManual = options.trigger === "manual";
     const isValid = this.refreshValidation(isManual ? "submit" : "silent");
     if (!isValid) {
+      if (!isManual && this.currentSession) {
+        const validation = evaluateSessionValidation(this.currentSession, { app: this.app });
+        this.renderValidationSummary(validation.issues);
+      }
       this.updateSaveStatus({
         state: "failed",
         reason: "validation_blocked",
@@ -1423,6 +1492,7 @@ export class SessionView extends ItemView {
       });
       return false;
     }
+    this.clearValidationSummary();
 
     try {
       await this.persistSession();
@@ -1466,6 +1536,7 @@ export class SessionView extends ItemView {
     this.projectButtonEl = null;
     this.projectProgressEl = null;
     this.saveStatusEl = null;
+    this.validationSummaryEl = null;
     this.hasSubmitted = false;
     this.saveStatus = { state: "idle" };
 
@@ -1491,6 +1562,7 @@ export class SessionView extends ItemView {
     this.projectButtonEl = null;
     this.projectProgressEl = null;
     this.saveStatusEl = null;
+    this.validationSummaryEl = null;
     this.hasSubmitted = false;
     this.saveStatus = { state: "idle" };
 
