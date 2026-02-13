@@ -2,12 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import {
   ADD_ASSERTION_TYPES,
   getAssertionModalVisibility,
+  getUnanchoredBlockingIssues,
   SessionView,
   getMatchActionLabel,
   getMatchStatusDisplay
 } from "../src/views/session-view";
 import { App, WorkspaceLeaf } from "obsidian";
 import { SessionManager } from "../src/session-manager";
+import { SessionValidationIssue } from "../src/session-validation";
 import { Person, Session } from "../src/types";
 
 function buildSession(persons: Person[]): Session {
@@ -183,6 +185,111 @@ describe("session-view ui logic", () => {
       expect(getMatchStatusDisplay(person.matched_to).title).toBe(
         "Matched to [[Jane Doe (1901-1978)]]"
       );
+    });
+  });
+
+  describe("non-field blocking summary selection", () => {
+    it("returns only unanchored blocking issues, deduped and sorted", () => {
+      const issues: SessionValidationIssue[] = [
+        {
+          fieldKey: "assertions[0]",
+          text: "Assertion participant references a missing session person.",
+          level: "error",
+          kind: "integrity",
+          code: "ref_invalid"
+        },
+        {
+          fieldKey: "assertions[0]",
+          text: "Assertion participant references a missing session person.",
+          level: "error",
+          kind: "integrity",
+          code: "ref_invalid"
+        },
+        {
+          fieldKey: "metadata.title",
+          text: "Title is required.",
+          level: "error",
+          kind: "required",
+          code: "required_missing"
+        },
+        {
+          fieldKey: "session.id",
+          text: "Session ID uses fallback format (UUID preferred).",
+          level: "warning",
+          kind: "id_policy",
+          code: "id_fallback"
+        },
+        {
+          fieldKey: "session.id",
+          text: "Session ID is required and must use a valid ID format.",
+          level: "error",
+          kind: "id_policy",
+          code: "id_invalid"
+        }
+      ];
+
+      const result = getUnanchoredBlockingIssues(
+        issues,
+        (fieldKey) => fieldKey === "metadata.title"
+      );
+
+      expect(result).toEqual([
+        {
+          fieldKey: "assertions[0]",
+          text: "Assertion participant references a missing session person.",
+          level: "error",
+          kind: "integrity",
+          code: "ref_invalid"
+        },
+        {
+          fieldKey: "session.id",
+          text: "Session ID is required and must use a valid ID format.",
+          level: "error",
+          kind: "id_policy",
+          code: "id_invalid"
+        }
+      ]);
+    });
+  });
+
+  describe("autosave timer scheduling", () => {
+    it("fires auto-save only after configured delay", () => {
+      vi.useFakeTimers();
+      const previousWindow = (globalThis as { window?: unknown }).window;
+      (globalThis as { window: typeof globalThis }).window = globalThis;
+      try {
+        const leaf = new WorkspaceLeaf();
+        const sessionManager = new SessionManager();
+        const vaultIndexer = {
+          getPersonEntries: () => []
+        } as never;
+        const settings = {
+          baseFolder: "Lineage"
+        };
+        const view = new SessionView(
+          leaf,
+          sessionManager,
+          vaultIndexer,
+          settings
+        ) as unknown as Record<string, unknown>;
+        const saveSessionSpy = vi.fn();
+        (view as { saveSession: unknown }).saveSession = saveSessionSpy;
+
+        (view as { scheduleSave: (delay?: number) => void }).scheduleSave(400);
+        vi.advanceTimersByTime(399);
+        expect(saveSessionSpy).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(1);
+        expect(saveSessionSpy).toHaveBeenCalledTimes(1);
+        expect(saveSessionSpy).toHaveBeenCalledWith({ trigger: "auto" });
+      } finally {
+        if (previousWindow === undefined) {
+          delete (globalThis as { window?: unknown }).window;
+        } else {
+          (globalThis as { window: unknown }).window = previousWindow;
+        }
+        vi.useRealTimers();
+      }
     });
   });
 });

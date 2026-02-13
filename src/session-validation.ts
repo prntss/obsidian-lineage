@@ -221,6 +221,14 @@ export function evaluateSessionValidation(
           });
         }
       }
+    } else if ((assertion.participants?.length ?? 0) === 0) {
+      issues.push({
+        fieldKey: assertionField,
+        text: "Assertion requires at least one participant.",
+        level: "error",
+        kind: "integrity",
+        code: "ref_missing"
+      });
     }
 
     for (const participant of assertion.participants ?? []) {

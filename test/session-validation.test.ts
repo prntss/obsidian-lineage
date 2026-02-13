@@ -84,6 +84,22 @@ describe("evaluateSessionValidation", () => {
     expect(result.issues.some((issue) => issue.code === "ref_invalid")).toBe(true);
   });
 
+  it("blocks when non-parent-child assertion has no participants", () => {
+    const session = buildSession();
+    session.session.assertions[0].participants = [];
+
+    const result = evaluateSessionValidation(session);
+
+    expect(result.blocking).toBe(true);
+    expect(
+      result.issues.some(
+        (issue) =>
+          issue.code === "ref_missing" &&
+          issue.text === "Assertion requires at least one participant."
+      )
+    ).toBe(true);
+  });
+
   it("adds warning for fallback-format session IDs", () => {
     const session = buildSession();
     session.session.session.id = "fallback-id-123";

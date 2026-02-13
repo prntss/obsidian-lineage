@@ -1,6 +1,11 @@
 import { TFile } from "obsidian";
 import { Session } from "../types";
-import { buildProjectedEntityIndex, ensureBaseFolders } from "./helpers";
+import {
+  buildProjectedEntityIndex,
+  ensureBaseFolders,
+  ensurePersonFile,
+  wikilinkForFile
+} from "./helpers";
 import { projectBirthDeathAssertions } from "./rules/birth-death";
 import { projectCitations } from "./rules/citations";
 import { projectIdentityAssertions } from "./rules/identity";
@@ -37,6 +42,7 @@ export class ProjectionEngine {
     };
 
     await ensureBaseFolders(this.context.app, this.context.settings);
+    await this.projectSessionPersons(summary, state, session, sessionFile);
 
     await projectIdentityAssertions(this.context, summary, state, session);
     await projectBirthDeathAssertions(this.context, summary, state, session);
@@ -51,6 +57,27 @@ export class ProjectionEngine {
     }
 
     return summary;
+  }
+
+  private async projectSessionPersons(
+    summary: ProjectionSummary,
+    state: ProjectionState,
+    session: Session,
+    sessionFile?: TFile
+  ): Promise<void> {
+    for (const person of session.session.persons) {
+      const file = await ensurePersonFile(this.context, state, summary, person);
+      if (!person.matched_to?.trim()) {
+        person.matched_to = this.linkForSessionFile(file, sessionFile);
+      }
+    }
+  }
+
+  private linkForSessionFile(file: TFile, sessionFile?: TFile): string {
+    if (sessionFile && this.context.app.fileManager?.generateMarkdownLink) {
+      return this.context.app.fileManager.generateMarkdownLink(file, sessionFile.path);
+    }
+    return wikilinkForFile(file);
   }
 
   private appendProjectionCoverageNotes(
