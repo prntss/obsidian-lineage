@@ -361,6 +361,7 @@ export class SessionView extends ItemView {
     documentSection.appendChild(documentMessage);
 
     const sessionDocument = session.session.session.document;
+    const documentFiles = this.getNormalizedDocumentFiles(sessionDocument.files);
     this.renderTextInput(documentSection, {
       label: "URL",
       value: sessionDocument.url ?? "",
@@ -371,17 +372,56 @@ export class SessionView extends ItemView {
       }
     });
 
-    this.renderFileInput(documentSection, {
-      label: "File (vault path)",
-      value: sessionDocument.file ?? "",
-      fieldKey: "document.file",
-      onChange: (value) => {
-        sessionDocument.file = value;
-      },
-      onPick: (file) => {
-        sessionDocument.file = file.path;
-      }
+    const renderDocumentFiles = () => {
+      this.renderSession(session);
+      this.scheduleSave();
+    };
+    documentFiles.forEach((filePath, index) => {
+      this.renderFileInput(documentSection, {
+        label: index === 0 ? "Files (vault paths)" : `File ${index + 1}`,
+        value: filePath,
+        fieldKey: `document.files[${index}]`,
+        onChange: (value) => {
+          documentFiles[index] = value;
+          sessionDocument.files = documentFiles;
+        },
+        onPick: (file) => {
+          documentFiles[index] = file.path;
+          sessionDocument.files = documentFiles;
+        },
+        onMoveUp: index > 0 ? () => {
+          [documentFiles[index - 1], documentFiles[index]] = [
+            documentFiles[index],
+            documentFiles[index - 1]
+          ];
+          sessionDocument.files = documentFiles;
+          renderDocumentFiles();
+        } : undefined,
+        onMoveDown: index < documentFiles.length - 1 ? () => {
+          [documentFiles[index], documentFiles[index + 1]] = [
+            documentFiles[index + 1],
+            documentFiles[index]
+          ];
+          sessionDocument.files = documentFiles;
+          renderDocumentFiles();
+        } : undefined,
+        onRemove: () => {
+          documentFiles.splice(index, 1);
+          sessionDocument.files = documentFiles;
+          renderDocumentFiles();
+        }
+      });
     });
+    const addFileButton = document.createElement("button");
+    addFileButton.type = "button";
+    addFileButton.className = "session-button";
+    addFileButton.textContent = "Add file";
+    addFileButton.addEventListener("click", () => {
+      documentFiles.push("");
+      sessionDocument.files = documentFiles;
+      renderDocumentFiles();
+    });
+    documentSection.appendChild(addFileButton);
 
     this.renderTextArea(documentSection, {
       label: "Transcription",
@@ -521,6 +561,9 @@ export class SessionView extends ItemView {
       fieldKey: string;
       onChange: (value: string) => void;
       onPick: (file: TFile) => void;
+      onMoveUp?: () => void;
+      onMoveDown?: () => void;
+      onRemove?: () => void;
     }
   ): HTMLInputElement {
     const field = document.createElement("div");
@@ -562,6 +605,30 @@ export class SessionView extends ItemView {
       modal.open();
     });
     row.appendChild(button);
+    if (options.onMoveUp) {
+      const moveUp = document.createElement("button");
+      moveUp.type = "button";
+      moveUp.className = "session-button";
+      moveUp.textContent = "Up";
+      moveUp.addEventListener("click", options.onMoveUp);
+      row.appendChild(moveUp);
+    }
+    if (options.onMoveDown) {
+      const moveDown = document.createElement("button");
+      moveDown.type = "button";
+      moveDown.className = "session-button";
+      moveDown.textContent = "Down";
+      moveDown.addEventListener("click", options.onMoveDown);
+      row.appendChild(moveDown);
+    }
+    if (options.onRemove) {
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "session-button is-danger";
+      remove.textContent = "Remove";
+      remove.addEventListener("click", options.onRemove);
+      row.appendChild(remove);
+    }
     field.appendChild(row);
 
     const message = this.createFieldMessage(options.fieldKey);
@@ -1025,7 +1092,9 @@ export class SessionView extends ItemView {
         session.metadata.locator = updates.metadata.locator;
         session.session.session.document = {
           url: updates.session.session.document.url ?? "",
-          file: updates.session.session.document.file ?? "",
+          files: (updates.session.session.document.files ?? [])
+            .map((filePath) => filePath?.trim() ?? "")
+            .filter((filePath) => Boolean(filePath)),
           transcription: updates.session.session.document.transcription ?? ""
         };
         session.session.persons = updates.session.persons;
@@ -1125,28 +1194,41 @@ export class SessionView extends ItemView {
     }
 
     const session = this.currentSession;
+    const linkedAssertions = this.findAssertionsReferencingPerson(personId);
+    if (linkedAssertions.length > 0) {
+      const count = linkedAssertions.length;
+      const label = count === 1 ? "assertion" : "assertions";
+      new Notice(
+        `Cannot delete person: referenced by ${count} ${label} (${linkedAssertions
+          .map((assertion) => assertion.id)
+          .join(", ")}). Resolve references first.`
+      );
+      return;
+    }
     session.session.persons = session.session.persons.filter(
       (person) => person.id !== personId
     );
 
-    session.session.assertions.forEach((assertion) => {
-      if (!assertion.participants) {
-        // no-op
-      } else {
-        assertion.participants = assertion.participants.filter(
-          (participant) => participant.person_ref !== personId
-        );
-      }
-      if (assertion.parent_ref === personId) {
-        assertion.parent_ref = undefined;
-      }
-      if (assertion.child_ref === personId) {
-        assertion.child_ref = undefined;
-      }
-    });
-
     this.renderSession(session);
     this.scheduleSave();
+  }
+
+  private findAssertionsReferencingPerson(personId: string): Assertion[] {
+    if (!this.currentSession) {
+      return [];
+    }
+
+    return this.currentSession.session.assertions.filter((assertion) => {
+      const hasParticipantRef =
+        assertion.participants?.some((participant) => participant.person_ref === personId) ??
+        false;
+      return hasParticipantRef || assertion.parent_ref === personId || assertion.child_ref === personId;
+    });
+  }
+
+  private getNormalizedDocumentFiles(files: string[] | undefined): string[] {
+    const normalized = (files ?? []).map((filePath) => filePath ?? "");
+    return normalized.length > 0 ? [...normalized] : [""];
   }
 
   private addAssertion(result: AddAssertionResult): void {

@@ -91,6 +91,7 @@ export function evaluateSessionValidation(
 ): SessionValidationResult {
   const issues: SessionValidationIssue[] = [];
   const document = session.session.session.document;
+  const documentFiles = (document.files ?? []).map((filePath) => filePath?.trim() ?? "");
 
   if (!session.metadata.title.trim()) {
     pushRequiredIssue(issues, "metadata.title", "Title is required.");
@@ -120,7 +121,7 @@ export function evaluateSessionValidation(
 
   const hasCapture =
     Boolean(document.url?.trim()) ||
-    Boolean(document.file?.trim()) ||
+    documentFiles.some((filePath) => Boolean(filePath)) ||
     Boolean(document.transcription?.trim());
   if (!hasCapture) {
     issues.push({
@@ -143,18 +144,23 @@ export function evaluateSessionValidation(
     });
   }
 
-  const filePath = document.file?.trim() ?? "";
-  if (filePath && options.app) {
-    const file = options.app.vault.getAbstractFileByPath(filePath);
-    if (!(file instanceof TFile)) {
-      issues.push({
-        fieldKey: "document.file",
-        text: "File not found in the vault.",
-        level: "error",
-        kind: "format",
-        code: "file_not_found"
-      });
-    }
+  if (options.app) {
+    documentFiles.forEach((filePath, index) => {
+      if (!filePath) {
+        return;
+      }
+
+      const file = options.app?.vault.getAbstractFileByPath(filePath);
+      if (!(file instanceof TFile)) {
+        issues.push({
+          fieldKey: `document.files[${index}]`,
+          text: "File not found in the vault.",
+          level: "error",
+          kind: "format",
+          code: "file_not_found"
+        });
+      }
+    });
   }
 
   const sessionId = session.session.session.id?.trim() ?? "";

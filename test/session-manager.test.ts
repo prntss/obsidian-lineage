@@ -22,7 +22,7 @@ session:
   id: test-id
   document:
     url: "https://example.com"
-    file: ""
+    files: []
     transcription: ""
 sources: []
 persons: []
@@ -53,7 +53,7 @@ session:
   id: test-id
   document:
     url: "https://example.com"
-    file: ""
+    files: []
     transcription: ""
 sources: []
 persons:
@@ -86,7 +86,7 @@ session:
   id: test-id
   document:
     url: "https://example.com"
-    file: ""
+    files: []
     transcription: ""
 sources: []
 persons: []
@@ -113,7 +113,7 @@ session:
   id: test-id
   document:
     url: "https://example.com"
-    file: ""
+    files: []
     transcription: ""
 sources: []
 persons: []
@@ -123,6 +123,68 @@ citations: []
 `;
 
     expect(() => manager.parseSession(content)).toThrow(/Expected title to be a string/);
+  });
+
+  it("migrates legacy document.file into document.files", () => {
+    const content = `---
+lineage_type: research_session
+title: "Legacy File Session"
+record_type: census
+repository: "Test Archive"
+locator: "https://example.com"
+projected_entities: []
+---
+
+\`\`\`lineage-session
+session:
+  id: test-id
+  document:
+    url: "https://example.com"
+    file: "Sources/legacy.png"
+    transcription: ""
+sources: []
+persons: []
+assertions: []
+citations: []
+\`\`\`
+`;
+
+    const session = manager.parseSession(content);
+    expect(session.session.session.document.files).toEqual(["Sources/legacy.png"]);
+  });
+
+  it("prefers document.files when both files and legacy file exist", () => {
+    const content = `---
+lineage_type: research_session
+title: "Dual File Session"
+record_type: census
+repository: "Test Archive"
+locator: "https://example.com"
+projected_entities: []
+---
+
+\`\`\`lineage-session
+session:
+  id: test-id
+  document:
+    url: "https://example.com"
+    files:
+      - "Sources/new-a.png"
+      - "Sources/new-b.png"
+    file: "Sources/legacy.png"
+    transcription: ""
+sources: []
+persons: []
+assertions: []
+citations: []
+\`\`\`
+`;
+
+    const session = manager.parseSession(content);
+    expect(session.session.session.document.files).toEqual([
+      "Sources/new-a.png",
+      "Sources/new-b.png"
+    ]);
   });
 });
 
@@ -143,7 +205,7 @@ describe("SessionManager.serializeSession", () => {
           id: "session-id",
           document: {
             url: "https://example.com",
-            file: "",
+            files: [],
             transcription: ""
           }
         },
@@ -176,7 +238,7 @@ describe("SessionManager.serializeSession", () => {
           id: "session-id",
           document: {
             url: "https://example.com",
-            file: "",
+            files: [],
             transcription: ""
           }
         },

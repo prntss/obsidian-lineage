@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { App, TFile } from "obsidian";
+import { describe, expect, it, vi } from "vitest";
 import { evaluateSessionValidation } from "../src/session-validation";
 import { Session } from "../src/types";
 
@@ -18,7 +19,7 @@ function buildSession(overrides: Partial<Session> = {}): Session {
         id: "c6d79d2c-ecfc-49a7-9572-e0c1a4a7fbd0",
         document: {
           url: "https://example.com",
-          file: "",
+          files: [],
           transcription: ""
         }
       },
@@ -108,5 +109,26 @@ describe("evaluateSessionValidation", () => {
 
     expect(result.blocking).toBe(false);
     expect(result.issues.some((issue) => issue.code === "id_fallback")).toBe(true);
+  });
+
+  it("blocks when any linked document file is missing from vault", () => {
+    const session = buildSession();
+    session.session.session.document.files = ["Sources/p1.png", "Sources/missing.png"];
+    const app = {
+      vault: {
+        getAbstractFileByPath: vi.fn((path: string) =>
+          path === "Sources/p1.png" ? new TFile(path, "p1.png") : null
+        )
+      }
+    } as unknown as App;
+
+    const result = evaluateSessionValidation(session, { app });
+
+    expect(result.blocking).toBe(true);
+    expect(
+      result.issues.some(
+        (issue) => issue.fieldKey === "document.files[1]" && issue.code === "file_not_found"
+      )
+    ).toBe(true);
   });
 });
