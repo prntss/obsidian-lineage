@@ -25,13 +25,22 @@ test-results/
 
 # Cache/temp
 .cache/
+.npm/
+.eslintcache
 *.tmp
+
+# Runtime/diagnostics
+*.pid
+*.pid.lock
+*.seed
+report.*.*.*.*.json
 
 # Package manager logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+lerna-debug.log*
 
 # Local plugin runtime data
 data.json
@@ -46,6 +55,8 @@ CLAUDE.md
 AGENTS.md
 .claude/
 .codex/
+.gemini/
+GEMINI.md
 
 # Docs: private directories (internal planning artifacts)
 docs/plans/
@@ -64,3 +75,10 @@ docs/reference/
 
 # Todos are private
 todos/
+
+# Windows/IDE extras
+*:Zone.Identifier
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
