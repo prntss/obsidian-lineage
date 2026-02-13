@@ -103,6 +103,8 @@ export class SessionView extends ItemView {
   private saveButtonEl: HTMLButtonElement | null = null;
   private projectButtonEl: HTMLButtonElement | null = null;
   private projectProgressEl: HTMLDivElement | null = null;
+  private personActionMessageEl: HTMLDivElement | null = null;
+  private personActionMessage: string | null = null;
   private saveSpinnerTimeout: number | null = null;
   private projectProgressTimeout: number | null = null;
   private hasSubmitted = false;
@@ -174,6 +176,8 @@ export class SessionView extends ItemView {
     this.projectProgressEl = null;
     this.saveStatusEl = null;
     this.validationSummaryEl = null;
+    this.personActionMessageEl = null;
+    this.personActionMessage = null;
     this.clearTimeouts();
   }
 
@@ -285,6 +289,7 @@ export class SessionView extends ItemView {
     container.empty();
     this.fieldMessages.clear();
     this.fieldControls.clear();
+    this.personActionMessageEl = null;
     this.hasSubmitted = false;
 
     const layout = document.createElement("div");
@@ -681,6 +686,12 @@ export class SessionView extends ItemView {
   }
 
   private renderPersons(container: HTMLElement, session: Session): void {
+    const actionMessage = document.createElement("div");
+    actionMessage.className = "session-field-message is-empty";
+    actionMessage.setAttribute("aria-live", "polite");
+    this.personActionMessageEl = actionMessage;
+    this.syncPersonActionMessage();
+
     const list = document.createElement("div");
     list.className = "session-person-list";
 
@@ -769,6 +780,7 @@ export class SessionView extends ItemView {
     });
 
     container.appendChild(list);
+    container.appendChild(actionMessage);
     container.appendChild(addButton);
   }
 
@@ -1198,13 +1210,16 @@ export class SessionView extends ItemView {
     if (linkedAssertions.length > 0) {
       const count = linkedAssertions.length;
       const label = count === 1 ? "assertion" : "assertions";
+      const message = `Cannot remove person: referenced by ${count} ${label} (${linkedAssertions
+        .map((assertion) => assertion.id)
+        .join(", ")}). Resolve references first.`;
+      this.setPersonActionMessage(message);
       new Notice(
-        `Cannot delete person: referenced by ${count} ${label} (${linkedAssertions
-          .map((assertion) => assertion.id)
-          .join(", ")}). Resolve references first.`
+        message
       );
       return;
     }
+    this.setPersonActionMessage(null);
     session.session.persons = session.session.persons.filter(
       (person) => person.id !== personId
     );
@@ -1229,6 +1244,29 @@ export class SessionView extends ItemView {
   private getNormalizedDocumentFiles(files: string[] | undefined): string[] {
     const normalized = (files ?? []).map((filePath) => filePath ?? "");
     return normalized.length > 0 ? [...normalized] : [""];
+  }
+
+  private setPersonActionMessage(message: string | null): void {
+    this.personActionMessage = message;
+    this.syncPersonActionMessage();
+  }
+
+  private syncPersonActionMessage(): void {
+    if (!this.personActionMessageEl) {
+      return;
+    }
+
+    const message = this.personActionMessage?.trim() ?? "";
+    if (!message) {
+      this.personActionMessageEl.textContent = "";
+      this.personActionMessageEl.classList.add("is-empty");
+      this.personActionMessageEl.classList.remove("is-warning");
+      return;
+    }
+
+    this.personActionMessageEl.textContent = message;
+    this.personActionMessageEl.classList.remove("is-empty");
+    this.personActionMessageEl.classList.add("is-warning");
   }
 
   private addAssertion(result: AddAssertionResult): void {
@@ -1619,6 +1657,8 @@ export class SessionView extends ItemView {
     this.projectProgressEl = null;
     this.saveStatusEl = null;
     this.validationSummaryEl = null;
+    this.personActionMessageEl = null;
+    this.personActionMessage = null;
     this.hasSubmitted = false;
     this.saveStatus = { state: "idle" };
 
@@ -1645,6 +1685,8 @@ export class SessionView extends ItemView {
     this.projectProgressEl = null;
     this.saveStatusEl = null;
     this.validationSummaryEl = null;
+    this.personActionMessageEl = null;
+    this.personActionMessage = null;
     this.hasSubmitted = false;
     this.saveStatus = { state: "idle" };
 

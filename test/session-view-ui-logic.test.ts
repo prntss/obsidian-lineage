@@ -328,6 +328,9 @@ describe("session-view ui logic", () => {
         "p1",
         "p2"
       ]);
+      expect((view as Record<string, unknown>).personActionMessage).toContain(
+        "Cannot remove person: referenced by 1 assertion (a1)."
+      );
       expect(view.renderSession).not.toHaveBeenCalled();
       expect(view.scheduleSave).not.toHaveBeenCalled();
     });
@@ -366,6 +369,9 @@ describe("session-view ui logic", () => {
         "p1",
         "p2"
       ]);
+      expect((view as Record<string, unknown>).personActionMessage).toContain(
+        "Cannot remove person: referenced by 1 assertion (a1)."
+      );
       expect(view.renderSession).not.toHaveBeenCalled();
       expect(view.scheduleSave).not.toHaveBeenCalled();
     });
@@ -401,6 +407,7 @@ describe("session-view ui logic", () => {
       (view as Record<string, unknown>).removePerson("p1");
 
       expect(view.currentSession?.session.persons.map((person) => person.id)).toEqual(["p2"]);
+      expect((view as Record<string, unknown>).personActionMessage).toBeNull();
       expect(view.renderSession).toHaveBeenCalledTimes(1);
       expect(view.scheduleSave).toHaveBeenCalledTimes(1);
     });
